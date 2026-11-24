@@ -1,0 +1,561 @@
+//! Configurações → Plugins: um cartão para cada .lua da pasta, com o que está no
+//! cabeçalho dele (nome, descrição, versão, o que pede), mesmo desligado, o
+//! interruptor, o erro, os hosts a aprovar e o botão do painel.
+const std = @import("std");
+const d = @import("draw.zig");
+const qa = @import("qa.zig");
+const anim = @import("anim.zig");
+const i18n = @import("i18n.zig");
+const inbox = @import("inbox.zig");
+const plugin_panel = @import("plugin_panel.zig");
+const engine = @import("../plugins/engine.zig");
+const manifest = @import("../plugins/manifest.zig");
+const version = @import("../core/version.zig");
+const exemplos = @import("plugin_examples");
+const widgets = @import("widgets.zig");
+const c = @import("c");
+
+const Plugin = engine.Plugin;
+
+/// Rótulo de cada capacidade, e a explicação que aparece com o mouse em cima.
+const Label = struct { cap: engine.Cap, pt: []const u8, en: []const u8, tip_pt: []const u8, tip_en: []const u8, strong: bool = false };
+const labels = [_]Label{
+    .{ .cap = .messages, .pt = "Lê mensagens", .en = "Reads messages", .tip_pt = "Vê as mensagens que chegam e as carregadas, de qualquer canal", .tip_en = "Sees incoming and loaded messages, in any channel", .strong = true },
+    .{ .cap = .send, .pt = "Envia quando você pede", .en = "Sends when you ask", .tip_pt = "Só num comando, atalho, botão ou menu dele; nunca sozinho", .tip_en = "Only from its command, keybind, button or menu; never on its own", .strong = true },
+    .{ .cap = .http, .pt = "Internet", .en = "Internet", .tip_pt = "Só HTTPS, só para os hosts abaixo, e depois que você aprovar", .tip_en = "HTTPS only, only to the hosts below, and after you approve", .strong = true },
+    .{ .cap = .lsp, .pt = "Propõe um programa", .en = "Proposes a program", .tip_pt = "Só roda se você ligar em Erros no código", .tip_en = "Only runs if you turn it on under Code diagnostics", .strong = true },
+    .{ .cap = .composer, .pt = "Escreve na caixa", .en = "Writes in the box", .tip_pt = "Põe texto na caixa de mensagem quando você pede; nunca envia", .tip_en = "Puts text in the message box when you ask; never sends it" },
+    .{ .cap = .notify, .pt = "Avisos", .en = "Notifications", .tip_pt = "Avisos na janela e notificações do sistema", .tip_en = "In-app notices and desktop notifications" },
+    .{ .cap = .storage, .pt = "Guarda dados", .en = "Stores data", .tip_pt = "Até 1 MB neste computador, separado por conta", .tip_en = "Up to 1 MB on this computer, per account" },
+    .{ .cap = .timers, .pt = "Temporizadores", .en = "Timers", .tip_pt = "Roda depois de um tempo, só enquanto estiver ligado", .tip_en = "Runs after a delay, only while it's on" },
+    .{ .cap = .panel, .pt = "Painel", .en = "Panel", .tip_pt = "Um painel lateral próprio", .tip_en = "Its own side panel" },
+    .{ .cap = .menu, .pt = "Menus", .en = "Menus", .tip_pt = "Entradas no botão direito de mensagens e pessoas", .tip_en = "Entries on the right-click menu of messages and people" },
+    .{ .cap = .decorate, .pt = "Marca mensagens", .en = "Decorates messages", .tip_pt = "Selos, notas e recolher, só na sua tela", .tip_en = "Badges, notes and collapsing, only on your screen" },
+    .{ .cap = .rewrite, .pt = "Altera o que você envia", .en = "Changes what you send", .tip_pt = "Regras fixas aplicadas ao texto ao enviar; o plugin não vê o que você escreve", .tip_en = "Fixed rules applied to the text as you send; the plugin doesn't see what you write", .strong = true },
+    .{ .cap = .links, .pt = "Abre links", .en = "Opens links", .tip_pt = "Abre endereços no navegador quando você clica em algo dele", .tip_en = "Opens addresses in the browser when you click something of its own", .strong = true },
+    .{ .cap = .completions, .pt = "Sugere ao digitar", .en = "Suggests as you type", .tip_pt = "Uma lista na caixa de mensagem; o que você escolhe vai para a caixa, nunca é enviado sozinho", .tip_en = "A list in the message box; what you pick goes in the box and is never sent on its own" },
+    .{ .cap = .settings, .pt = "Opções", .en = "Options", .tip_pt = "As opções dele aparecem neste cartão", .tip_en = "Its options show up on this card" },
+    .{ .cap = .secrets, .pt = "Guarda segredos", .en = "Keeps secrets", .tip_pt = "Senhas e chaves de API no chaveiro do sistema, separadas por plugin", .tip_en = "Passwords and API keys in the system keyring, kept apart per plugin", .strong = true },
+    .{ .cap = .actions, .pt = "Age nas mensagens", .en = "Acts on messages", .tip_pt = "Reage, edita as suas, fixa e cria threads quando você pede; apagar sempre pergunta antes", .tip_en = "Reacts, edits yours, pins and starts threads when you ask; deleting always asks you first", .strong = true },
+};
+
+/// Vinham com o app e saíram: uns viraram funções do próprio app, outros eram só
+/// demonstração. Quem já tem continua usando até decidir arquivar.
+const retired = [_][]const u8{ "alerta.lua", "calc.lua", "dado.lua", "relogio.lua", "resumo.lua", "shrug.lua", "zoeira.lua", "bookmarks.lua", "filter.lua", "stats.lua", "snippets.lua", "timestamps.lua" };
+
+/// Um clique troca a lista de plugins: quem clicou fica aqui até o fim do desenho.
+var pending_update: ?*const exemplos.Exemplo = null;
+
+/// `p` é a página das configurações (settings.zig).
+pub fn draw(p: anytype) void {
+    const ctx = p.ctx;
+    const e = engine.current orelse return;
+    p.title(i18n.tr("Plugins", "Plugins"));
+    // No navegador não há thread dos plugins (ver runtime.inline_mode): quem segura é o limite.
+    if (@import("../plugins/runtime.zig").inline_mode)
+        para(p, i18n.tr("Scripts Lua que somam funções ao app, sem recompilar. Na demonstração do navegador eles rodam no mesmo ritmo da página: um plugin travado segura a tela até o limite de instruções parar ele.", "Lua scripts that add features to the app, no rebuild needed. In the browser demo they run alongside the page: a stuck plugin holds up the screen until the instruction limit stops it."), .muted)
+    else
+        para(p, i18n.tr("Scripts Lua que somam funções ao app, sem recompilar. Cada um roda numa thread só dos plugins: um plugin lento ou travado não segura a interface.", "Lua scripts that add features to the app, no rebuild needed. They run on a thread of their own: a slow or stuck plugin can't hold up the interface."), .muted);
+    var buf: [600]u8 = undefined;
+    para(p, i18n.fmt(&buf, "Pasta: {s}", "Folder: {s}", .{if (e.dir().len > 0) e.dir() else "—"}), .faint);
+    p.y += 6;
+    const reload_clicked = p.button(i18n.tr("Recarregar", "Reload"), false);
+    if (missingExamples(e) > 0) {
+        p.sameLine();
+        if (p.button(i18n.tr("Instalar os incluídos", "Install bundled plugins"), false)) {
+            installExamples(e);
+            return;
+        }
+    }
+    if (reload_clicked) {
+        // A lista é refeita: este quadro termina aqui.
+        e.reload();
+        return;
+    }
+    p.y += 6;
+    if (missingExamples(e) > 0) {
+        para(p, i18n.tr("Instalar copia para a pasta os que faltam: tradução, lembretes, destaques, links e arquivos, links limpos, anti-golpe, radar de CVE, cartões do GitHub e o que perdi. O que você já tem não é mexido.", "Install copies the missing ones to the folder: translate, reminders, highlights, links and files, clean links, scam guard, CVE radar, GitHub cards and what did I miss. What you already have is left alone."), .faint);
+        p.y += 4;
+    }
+    if (retiredLoaded(e) > 0 and archiveRow(p, e)) return;
+
+    if (e.list.items.len == 0) {
+        para(p, i18n.tr("Nenhum plugin encontrado. Ponha arquivos .lua na pasta acima e clique em Recarregar.", "No plugins found. Put .lua files in the folder above and click Reload."), .faint);
+        para(p, i18n.tr("Guia da API e exemplos: docs/plugins.md", "API guide and examples: docs/plugins.md"), .faint);
+    } else {
+        p.heading(i18n.plural(&buf, e.list.items.len, "{d} encontrado", "{d} encontrados", "{d} found", "{d} found", .{e.list.items.len}));
+        for (e.list.items) |pl| card(p, e, pl);
+        if (pending_update) |ex| {
+            pending_update = null;
+            updateBundled(e, ex);
+            return;
+        }
+    }
+
+    p.divider();
+    p.heading(i18n.tr("O que um plugin nunca faz", "What a plugin never does"));
+    para(p, i18n.tr("Não vê o token nem o e-mail da conta, e não abre arquivos, programas nem conexões por conta própria.", "It doesn't see your token or email, and can't open files, programs or connections on its own."), .faint);
+    para(p, i18n.tr("Não escreve na sua conta em segundo plano: enviar uma mensagem só vale direto de um comando, atalho, botão ou menu dele.", "It doesn't write to your account in the background: sending a message only works directly from its command, keybind, button or menu."), .faint);
+    para(p, i18n.tr("Limite de instruções e de memória por plugin: quem passar é parado, e o erro aparece aqui.", "Instruction and memory limits per plugin: whoever goes over is stopped, and the error shows up here."), .faint);
+    _ = ctx;
+}
+
+const Tone = enum { muted, faint };
+
+fn para(p: anytype, text: []const u8, tone: Tone) void {
+    const ctx = p.ctx;
+    const h = inbox.wrapText(p.dl, p.font(.regular), 13.5, p.x, p.y, p.w, text, 6, if (tone == .muted) ctx.col(.muted) else ctx.col(.faint));
+    p.y += h + 8;
+}
+
+fn card(p: anytype, e: *engine.Engine, pl: *Plugin) void {
+    const ctx = p.ctx;
+    const dl = p.dl;
+    const pad: f32 = 14;
+    const x = p.x + pad;
+    const w = p.w - 2 * pad;
+    const top = p.y;
+    var y = top + 12;
+
+    c.ImDrawList_ChannelsSplit(dl, 2);
+    c.ImDrawList_ChannelsSetCurrent(dl, 1);
+
+    // Linha de cima: bolinha do estado, nome, versão e o interruptor.
+    const st = pl.status();
+    const dot = switch (st) {
+        .running => ctx.col(.online),
+        .failed => ctx.col(.danger),
+        .waiting => ctx.col(.idle),
+        .off => ctx.col(.faint),
+    };
+    d.circle(dl, x + 5, y + 10, 4.5, dot);
+    const title_f = p.font(.semibold);
+    const sw_x = x + w - 40;
+    const title = pl.title();
+    const title_room = sw_x - (x + 18) - 12;
+    const shown_w = d.textClipped(dl, title_f, 16, x + 18, y, ctx.col(.text), title, title_room);
+    if (pl.man.version.len > 0) {
+        var vb: [32]u8 = undefined;
+        const v = std.fmt.bufPrint(&vb, "v{s}", .{pl.man.version}) catch "";
+        _ = d.textClipped(dl, p.font(.regular), 12, x + 18 + shown_w + 8, y + 4, ctx.col(.faint), v, title_room - shown_w - 8);
+    }
+    switchButton(p, e, pl, sw_x, y);
+    y += 24;
+
+    // Arquivo e estado.
+    var sb: [320]u8 = undefined;
+    const state_text = stateLine(&sb, pl);
+    _ = d.textClipped(dl, p.font(.regular), 12.5, x + 18, y, ctx.col(.faint), state_text, sw_x - x - 30);
+    y += 22;
+
+    // Descrição.
+    const about = pl.about();
+    if (about.len > 0) {
+        y += inbox.wrapText(dl, p.font(.regular), 13.5, x, y, w, about, 6, ctx.col(.muted)) + 8;
+    } else if (pl.man.legacy) {
+        y += inbox.wrapText(dl, p.font(.regular), 13.5, x, y, w, i18n.tr("Arquivo sem cabeçalho: funciona com a API antiga (mensagens, comandos, envio e avisos). Para usar painéis, menus e o resto, veja docs/plugins.md.", "File without a manifest: it works with the old API (messages, commands, sending and notices). To use panels, menus and the rest, see docs/plugins.md."), 4, ctx.col(.muted)) + 8;
+    }
+
+    // O que pede.
+    y = chips(p, pl, x, y, w);
+    y = alertLine(p, pl, x, y, w);
+    y = credentialsLine(p, pl, x, y, w);
+
+    // Comandos e atalhos, se está rodando.
+    if (pl.isRunning() and (pl.commands.items.len > 0 or pl.keys.items.len > 0)) {
+        var cb: [320]u8 = undefined;
+        const line = commandsLine(&cb, pl);
+        y += inbox.wrapText(dl, p.font(.medium), 12.5, x, y, w, line, 3, ctx.col(.muted).mix(ctx.col(.text), 0.2)) + 8;
+    }
+
+    // Hosts: a aprovação é por plugin e por host.
+    for (pl.man.hostList(), 0..) |h, i| y = hostRow(p, e, pl, h, i, x, y, w);
+    // O que ele pediu à internet (só quem pode pedir).
+    if (pl.man.has(.http)) y = netLog(p, pl, x, y, w);
+
+    // Opções do próprio plugin (só ligado: desligado não tem quem responda).
+    if (pl.settings) |tree| {
+        y += 2;
+        d.line(dl, x, y, x + w, y, ctx.col(.border), 1);
+        y += 10;
+        y += plugin_panel.embedded(ctx, dl, e, pl, tree, x, y, w);
+    }
+
+    // Veio uma versão nova com o app: só troca com o clique, e guarda a de antes.
+    if (bundledNewer(pl)) |ex| {
+        var ub: [64]u8 = undefined;
+        const lbl = i18n.fmt(&ub, "Atualizar para v{s}", "Update to v{s}", .{manifest.parse(ex.source).version});
+        const r: d.Rect = .{ .x = x, .y = y, .w = inbox.buttonWidth(ctx, lbl), .h = 28 };
+        qa.mark(r, "plugin-update:{s}", .{pl.name});
+        if (inbox.button(ctx, dl, 0xCC000 + @as(usize, pl.slot) * 16, r, lbl, false)) pending_update = ex;
+        y += 36;
+    }
+
+    // Painel.
+    if (pl.tree != null) {
+        const lbl = if (e.panel_open == pl) i18n.tr("Fechar painel", "Close panel") else i18n.tr("Abrir painel", "Open panel");
+        const r: d.Rect = .{ .x = x, .y = y, .w = inbox.buttonWidth(ctx, lbl), .h = 28 };
+        qa.mark(r, "plugin-open:{s}", .{pl.name});
+        if (inbox.button(ctx, dl, 0xC8000 + @as(usize, pl.slot) * 16, r, lbl, false)) {
+            const was_open = e.panel_open == pl;
+            plugin_panel.toggle(pl);
+            // Para ver o painel, as configurações saem da frente.
+            if (!was_open) ctx.act(.close_settings);
+        }
+        y += 36;
+    }
+
+    // Erro.
+    if (pl.err()) |msg| {
+        y = errorText(p, pl.name, msg, x, y, w);
+    } else {
+        // Cabeçalho com problema: diz antes de a pessoa tentar ligar.
+        var mb: [300]u8 = undefined;
+        if (pl.man.problemText(&mb, i18n.en())) |msg| y = errorText(p, pl.name, msg, x, y, w);
+    }
+
+    // O fundo do cartão, agora que se sabe a altura.
+    const box: d.Rect = .{ .x = p.x, .y = top, .w = p.w, .h = y + 4 - top };
+    c.ImDrawList_ChannelsSetCurrent(dl, 0);
+    const rad = @max(ctx.th.radius, 6);
+    d.rect(dl, box, ctx.col(.rail).mix(ctx.col(.elevated), 0.35).alpha(if (st == .off) 0.45 else 0.8), rad);
+    d.border(dl, box, if (st == .failed) ctx.col(.danger).alpha(0.7) else ctx.col(.border), rad, 1);
+    c.ImDrawList_ChannelsMerge(dl);
+    qa.mark(box, "plugin-card:{s}", .{pl.name});
+    p.y = box.bottom() + 10;
+}
+
+fn switchButton(p: anytype, e: *engine.Engine, pl: *Plugin, x: f32, y: f32) void {
+    const ctx = p.ctx;
+    const dl = p.dl;
+    const sw: d.Rect = .{ .x = x, .y = y, .w = 40, .h = 24 };
+    const id = 0xC0000 + @as(usize, pl.slot) * 16;
+    const hb = d.hit(ctx, id, sw);
+    qa.mark(sw, "toggle:{s}", .{pl.name});
+    const on = anim.to(anim.id("plugin-sw", id), if (pl.enabled) 1 else 0, 22);
+    d.rect(dl, sw, ctx.col(.faint).mix(ctx.col(.accent), on), 12);
+    const kx = sw.x + 12 + on * 16;
+    d.circle(dl, kx, sw.y + 12, 9, d.Rgba.white);
+    const ink = ctx.col(.faint).mix(ctx.col(.accent), on);
+    if (on > 0.5) {
+        d.line(dl, kx - 4, sw.y + 12, kx - 1, sw.y + 15, ink, 2);
+        d.line(dl, kx - 1, sw.y + 15, kx + 4, sw.y + 9, ink, 2);
+    } else {
+        d.line(dl, kx - 3, sw.y + 9, kx + 3, sw.y + 15, ink, 2);
+        d.line(dl, kx + 3, sw.y + 9, kx - 3, sw.y + 15, ink, 2);
+    }
+    d.tip(ctx, sw, if (pl.enabled) i18n.tr("Desligar", "Turn off") else i18n.tr("Ligar", "Turn on"), hb.hovered);
+    if (hb.clicked) e.setEnabled(pl, !pl.enabled);
+}
+
+fn chips(p: anytype, pl: *const Plugin, x: f32, y_in: f32, w: f32) f32 {
+    const ctx = p.ctx;
+    const dl = p.dl;
+    const f = p.font(.medium);
+    const fs: f32 = 12;
+    var cx = x;
+    var y = y_in;
+    var any = false;
+    const line_h: f32 = 26;
+    if (pl.man.legacy) {
+        const lbl = i18n.tr("API antiga", "Old API");
+        const cw = d.width(f, fs, lbl) + 16;
+        const r: d.Rect = .{ .x = cx, .y = y, .w = cw, .h = 22 };
+        d.border(dl, r, ctx.col(.border), 11, 1);
+        d.text(dl, f, fs, r.x + 8, d.centerY(r, fs), ctx.col(.muted), lbl);
+        d.tip(ctx, r, i18n.tr("Lê mensagens, envia quando você pede, dá avisos e propõe programas", "Reads messages, sends when you ask, shows notices and proposes programs"), ctx.hovering(r));
+        qa.mark(r, "plugin-chip:{s}:legado", .{pl.name});
+        cx += cw + 6;
+        any = true;
+    }
+    for (labels) |l| {
+        if (pl.man.legacy or !pl.man.has(l.cap)) continue;
+        const lbl = i18n.tr(l.pt, l.en);
+        const cw = d.width(f, fs, lbl) + 16;
+        if (cx + cw > x + w and cx > x) {
+            cx = x;
+            y += line_h;
+        }
+        const r: d.Rect = .{ .x = cx, .y = y, .w = cw, .h = 22 };
+        // Sem clique: um retângulo de dica.
+        const over = ctx.hovering(r);
+        d.rect(dl, r, if (l.strong) ctx.col(.accent).alpha(if (over) 0.3 else 0.18) else ctx.col(.hover).alpha(if (over) 1 else 0.6), 11);
+        d.text(dl, f, fs, r.x + 8, d.centerY(r, fs), ctx.col(.text).mix(ctx.col(.muted), 0.15), lbl);
+        d.tip(ctx, r, i18n.tr(l.tip_pt, l.tip_en), over);
+        qa.mark(r, "plugin-chip:{s}:{t}", .{ pl.name, l.cap });
+        cx += cw + 6;
+        any = true;
+    }
+    return if (any) y + line_h + 2 else y;
+}
+
+/// Lê mensagens e consegue mandar algo para fora: uma linha clara, além das etiquetas.
+fn alertLine(p: anytype, pl: *const Plugin, x: f32, y: f32, w: f32) f32 {
+    if (pl.man.legacy or !pl.man.has(.messages)) return y;
+    const text = if (pl.man.has(.http))
+        i18n.tr("Lê suas mensagens e fala com a internet. Só ligue se confiar em quem fez.", "Reads your messages and talks to the internet. Only turn it on if you trust who made it.")
+    else if (pl.man.has(.links))
+        i18n.tr("Lê suas mensagens e abre endereços quando você clica. Só ligue se confiar em quem fez.", "Reads your messages and opens addresses when you click. Only turn it on if you trust who made it.")
+    else
+        return y;
+    const ctx = p.ctx;
+    const h = inbox.wrapText(p.dl, p.font(.regular), 12.5, x, y, w, text, 3, ctx.col(.idle));
+    qa.mark(.{ .x = x, .y = y, .w = w, .h = h }, "plugin-alert:{s}", .{pl.name});
+    return y + h + 8;
+}
+
+/// Manda credenciais para algum host: uma linha em vermelho, antes de a pessoa aprovar.
+fn credentialsLine(p: anytype, pl: *const Plugin, x: f32, y: f32, w: f32) f32 {
+    if (pl.man.legacy or pl.man.n_creds == 0) return y;
+    var hb: [400]u8 = undefined;
+    var at: usize = 0;
+    for (pl.man.credList()) |h| {
+        const piece = std.fmt.bufPrint(hb[at..], "{s}{s}", .{ if (at > 0) ", " else "", h }) catch break;
+        at += piece.len;
+    }
+    var tb: [600]u8 = undefined;
+    const text = i18n.fmt(&tb, "Manda credenciais (Authorization, X-API-Key) para {s}. Só aprove se confiar nele com essa conta.", "Sends credentials (Authorization, X-API-Key) to {s}. Only approve if you trust it with that account.", .{hb[0..at]});
+    const ctx = p.ctx;
+    const h = inbox.wrapText(p.dl, p.font(.medium), 12.5, x, y, w, text, 3, ctx.col(.danger));
+    qa.mark(.{ .x = x, .y = y, .w = w, .h = h }, "plugin-creds:{s}", .{pl.name});
+    return y + h + 8;
+}
+
+fn hostRow(p: anytype, e: *engine.Engine, pl: *Plugin, host: []const u8, i: usize, x: f32, y: f32, w: f32) f32 {
+    const ctx = p.ctx;
+    const dl = p.dl;
+    const ok = e.isApproved(pl.name, host);
+    const row: d.Rect = .{ .x = x, .y = y, .w = w, .h = 44 };
+    d.rect(dl, row, ctx.col(.elevated).alpha(0.7), 6);
+    const sw: d.Rect = .{ .x = row.right() - 50, .y = row.y + 10, .w = 40, .h = 24 };
+    _ = d.textClipped(dl, p.font(.semibold), 13, row.x + 10, row.y + 6, ctx.col(.text), host, row.w - 70);
+    const creds = pl.man.credentialPattern(host);
+    const wild = engine.http_policy.isWildcard(host);
+    const hint = if (ok)
+        (if (creds) i18n.tr("Aprovado, com credenciais: o plugin manda a chave dele para cá", "Approved, with credentials: the plugin sends its key here") else if (wild) i18n.tr("Aprovado: o plugin pode falar com os subdomínios deste domínio", "Approved: the plugin can talk to the subdomains of this domain") else i18n.tr("Aprovado: o plugin pode falar com este endereço", "Approved: the plugin can talk to this address"))
+    else if (creds)
+        i18n.tr("Não aprovado: nada sai, nem as credenciais", "Not approved: nothing goes out, credentials included")
+    else
+        i18n.tr("Não aprovado: nada sai enquanto estiver desligado", "Not approved: nothing goes out while this is off");
+    const hint_col = if (ok and creds) ctx.col(.danger) else if (ok) ctx.col(.online) else ctx.col(.faint);
+    _ = d.textClipped(dl, p.font(.regular), 12, row.x + 10, row.y + 24, hint_col, hint, row.w - 70);
+    const id = 0xC4000 + @as(usize, pl.slot) * 16 + i;
+    const hb = d.hit(ctx, id, sw);
+    qa.mark(sw, "host:{s}:{s}", .{ pl.name, host });
+    const on = anim.to(anim.id("plugin-host", id), if (ok) 1 else 0, 22);
+    d.rect(dl, sw, ctx.col(.faint).mix(ctx.col(.accent), on), 12);
+    d.circle(dl, sw.x + 12 + on * 16, sw.y + 12, 9, d.Rgba.white);
+    d.tip(ctx, sw, if (ok) i18n.tr("Tirar a aprovação", "Remove approval") else i18n.tr("Aprovar este host", "Approve this host"), hb.hovered);
+    if (hb.clicked) e.setApproved(pl, host, !ok);
+    return y + row.h + 8;
+}
+
+/// O registro de rede do plugin: um botão que abre a lista dos últimos pedidos
+/// (método, host, caminho sem a busca, status, tamanho, tempo e hora). Nunca o valor
+/// de um cabeçalho nem o corpo.
+fn netLog(p: anytype, pl: *Plugin, x: f32, y_in: f32, w: f32) f32 {
+    const ctx = p.ctx;
+    const dl = p.dl;
+    var y = y_in;
+    var lb: [80]u8 = undefined;
+    const lbl = if (pl.net_open) i18n.tr("Esconder a rede", "Hide network log") else i18n.fmt(&lb, "Rede: últimos pedidos ({d})", "Network log: recent requests ({d})", .{pl.net_n});
+    const r: d.Rect = .{ .x = x, .y = y, .w = inbox.buttonWidth(ctx, lbl), .h = 28 };
+    qa.mark(r, "plugin-net:{s}", .{pl.name});
+    if (inbox.button(ctx, dl, 0xCE000 + @as(usize, pl.slot) * 16, r, lbl, false)) pl.net_open = !pl.net_open;
+    y += 36;
+    if (!pl.net_open) return y;
+    if (pl.net_n == 0) {
+        y += inbox.wrapText(dl, p.font(.regular), 12.5, x, y, w, i18n.tr("Nenhum pedido ainda.", "No requests yet."), 2, ctx.col(.faint)) + 8;
+        return y;
+    }
+    const f = p.font(.regular);
+    var i: usize = 0;
+    while (pl.netEntry(i)) |ent| : (i += 1) {
+        var tb: [16]u8 = undefined;
+        var sb: [24]u8 = undefined;
+        var zb: [24]u8 = undefined;
+        const status: []const u8 = if (ent.err != .none) @tagName(ent.err) else std.fmt.bufPrint(&sb, "{d}", .{ent.status}) catch "";
+        const size = if (ent.bytes >= 1024) std.fmt.bufPrint(&zb, "{d:.1} KB", .{@as(f32, @floatFromInt(ent.bytes)) / 1024}) catch "" else std.fmt.bufPrint(&zb, "{d} B", .{ent.bytes}) catch "";
+        var line: [320]u8 = undefined;
+        const text = std.fmt.bufPrint(&line, "{s}  {t}  {s}{s}  ·  {s}  ·  {s}  ·  {d} ms", .{ widgets.clock(&tb, ent.time), ent.method, ent.host(), ent.path(), status, size, ent.ms }) catch "";
+        const bad = ent.err != .none or ent.status >= 400;
+        const row: d.Rect = .{ .x = x, .y = y, .w = w, .h = 20 };
+        _ = d.textClipped(dl, f, 12, row.x, row.y + 2, if (bad) ctx.col(.danger) else ctx.col(.muted), text, row.w);
+        qa.mark(row, "plugin-net-row:{s}:{d}", .{ pl.name, i });
+        y += 22;
+    }
+    return y + 6;
+}
+
+fn loaded(e: *const engine.Engine, name: []const u8) bool {
+    for (e.list.items) |pl| if (std.mem.eql(u8, pl.name, name)) return true;
+    return false;
+}
+
+fn missingExamples(e: *const engine.Engine) usize {
+    var n: usize = 0;
+    for (exemplos.list) |ex| {
+        if (!loaded(e, ex.name)) n += 1;
+    }
+    return n;
+}
+
+/// Grava só o que não existe: um plugin que a pessoa editou não é sobrescrito, e
+/// os arquivos de versões antigas continuam onde estão.
+fn installExamples(e: *engine.Engine) void {
+    if (e.dir().len == 0) return;
+    var dbuf: [512]u8 = undefined;
+    const dir = std.fmt.bufPrintSentinel(&dbuf, "{s}", .{e.dir()}, 0) catch return;
+    _ = c.SDL_CreateDirectory(dir.ptr);
+    for (exemplos.list) |ex| {
+        if (loaded(e, ex.name)) continue;
+        var buf: [600]u8 = undefined;
+        const path = std.fmt.bufPrintSentinel(&buf, "{s}/{s}", .{ e.dir(), ex.name }, 0) catch continue;
+        var info: c.SDL_PathInfo = undefined;
+        if (c.SDL_GetPathInfo(path.ptr, &info)) continue;
+        _ = c.SDL_SaveFile(path.ptr, ex.source.ptr, ex.source.len);
+    }
+    e.reload();
+}
+
+/// O incluído de mesmo nome, se a versão dele é maior que a do arquivo. Arquivo sem
+/// versão fica de fora: não dá para saber se é o mesmo plugin.
+fn bundledNewer(pl: *const Plugin) ?*const exemplos.Exemplo {
+    if (pl.man.version.len == 0) return null;
+    for (&exemplos.list) |*ex| {
+        if (!std.mem.eql(u8, ex.name, pl.name)) continue;
+        return if (version.newer(manifest.parse(ex.source).version, pl.man.version)) ex else null;
+    }
+    return null;
+}
+
+/// O caminho livre: "x.lua.bak", "x.lua.bak2"… Nunca sobrescreve uma cópia antiga.
+fn freeBackup(buf: []u8, path: []const u8) ?[:0]const u8 {
+    var n: u32 = 1;
+    while (n < 100) : (n += 1) {
+        const out = (if (n == 1) std.fmt.bufPrintSentinel(buf, "{s}.bak", .{path}, 0) else std.fmt.bufPrintSentinel(buf, "{s}.bak{d}", .{ path, n }, 0)) catch return null;
+        var info: c.SDL_PathInfo = undefined;
+        if (!c.SDL_GetPathInfo(out.ptr, &info)) return out;
+    }
+    return null;
+}
+
+/// Troca pelo incluído, depois de guardar o arquivo atual. Sem a cópia, não troca.
+fn updateBundled(e: *engine.Engine, ex: *const exemplos.Exemplo) void {
+    var pb: [600]u8 = undefined;
+    const path = std.fmt.bufPrintSentinel(&pb, "{s}/{s}", .{ e.dir(), ex.name }, 0) catch return;
+    var bb: [640]u8 = undefined;
+    const bak = freeBackup(&bb, path) orelse return;
+    if (!c.SDL_CopyFile(path.ptr, bak.ptr)) return;
+    _ = c.SDL_SaveFile(path.ptr, ex.source.ptr, ex.source.len);
+    e.reload();
+}
+
+fn isRetired(name: []const u8) bool {
+    for (retired) |r| if (std.mem.eql(u8, r, name)) return true;
+    return false;
+}
+
+fn retiredLoaded(e: *const engine.Engine) usize {
+    var n: usize = 0;
+    for (e.list.items) |pl| {
+        if (isRetired(pl.name)) n += 1;
+    }
+    return n;
+}
+
+/// Os que não vêm mais com o app. true = arquivou, e a lista foi refeita.
+fn archiveRow(p: anytype, e: *engine.Engine) bool {
+    const ctx = p.ctx;
+    var names: [320]u8 = undefined;
+    var at: usize = 0;
+    for (e.list.items) |pl| {
+        if (!isRetired(pl.name)) continue;
+        const piece = std.fmt.bufPrint(names[at..], "{s}{s}", .{ if (at > 0) ", " else "", pl.name }) catch break;
+        at += piece.len;
+    }
+    var tb: [460]u8 = undefined;
+    para(p, i18n.fmt(&tb, "Não vêm mais com o app: {s}. Continuam funcionando; arquivar só os tira da pasta, e nada é apagado.", "No longer bundled with the app: {s}. They keep working; archiving only moves them out of the folder, nothing is deleted.", .{names[0..at]}), .faint);
+    var lb: [80]u8 = undefined;
+    const lbl = i18n.fmt(&lb, "Arquivar em antigos/ ({d})", "Archive to antigos/ ({d})", .{retiredLoaded(e)});
+    const r: d.Rect = .{ .x = p.x, .y = p.y, .w = inbox.buttonWidth(ctx, lbl), .h = 28 };
+    qa.mark(r, "plugin-archive", .{});
+    const clicked = inbox.button(ctx, p.dl, 0xCD000, r, lbl, false);
+    p.y += 38;
+    if (!clicked) return false;
+    archiveRetired(e);
+    return true;
+}
+
+/// Move para plugins/antigos/, sem sobrescrever nada que já esteja lá.
+fn archiveRetired(e: *engine.Engine) void {
+    var db: [560]u8 = undefined;
+    const sub = std.fmt.bufPrintSentinel(&db, "{s}/antigos", .{e.dir()}, 0) catch return;
+    _ = c.SDL_CreateDirectory(sub.ptr);
+    for (retired) |name| {
+        if (!loaded(e, name)) continue;
+        var fb: [600]u8 = undefined;
+        const from = std.fmt.bufPrintSentinel(&fb, "{s}/{s}", .{ e.dir(), name }, 0) catch continue;
+        var tb: [640]u8 = undefined;
+        var n: u32 = 1;
+        while (n < 100) : (n += 1) {
+            const stem = name[0 .. name.len - 4];
+            const to = (if (n == 1) std.fmt.bufPrintSentinel(&tb, "{s}/{s}", .{ sub, name }, 0) else std.fmt.bufPrintSentinel(&tb, "{s}/{s}-{d}.lua", .{ sub, stem, n }, 0)) catch break;
+            var info: c.SDL_PathInfo = undefined;
+            if (c.SDL_GetPathInfo(to.ptr, &info)) continue;
+            _ = c.SDL_RenamePath(from.ptr, to.ptr);
+            break;
+        }
+    }
+    e.reload();
+}
+
+/// "bookmarks.lua · ligado · 120 KB".
+fn stateLine(buf: []u8, pl: *const Plugin) []const u8 {
+    const state = switch (pl.status()) {
+        .off => i18n.tr("desligado", "off"),
+        .failed => i18n.tr("parado por erro", "stopped by an error"),
+        .waiting => i18n.tr("liga ao entrar na conta", "starts when you log in"),
+        .running => i18n.tr("ligado", "on"),
+    };
+    if (pl.status() == .running) {
+        const shed = pl.shedCount();
+        if (shed > 0) return i18n.fmt(buf, "{s}  ·  {s}  ·  {d} KB  ·  lento: pulou {d} mensagens", "{s}  ·  {s}  ·  {d} KB  ·  slow: skipped {d} messages", .{ pl.name, state, pl.memBytes() / 1024, shed });
+        return std.fmt.bufPrint(buf, "{s}  ·  {s}  ·  {d} KB", .{ pl.name, state, pl.memBytes() / 1024 }) catch pl.name;
+    }
+    return std.fmt.bufPrint(buf, "{s}  ·  {s}", .{ pl.name, state }) catch pl.name;
+}
+
+/// "/shrug · Ctrl+Shift+X · LSP zig".
+fn commandsLine(buf: []u8, pl: *const Plugin) []const u8 {
+    var n: usize = 0;
+    const put = struct {
+        fn f(b: []u8, at: *usize, s: []const u8) void {
+            const k = @min(s.len, b.len - at.*);
+            @memcpy(b[at.*..][0..k], s[0..k]);
+            at.* += k;
+        }
+    }.f;
+    for (pl.commands.items) |cmd| {
+        if (n > 0) put(buf, &n, "  ·  ");
+        put(buf, &n, cmd);
+    }
+    for (pl.keys.items) |*k| {
+        if (n > 0) put(buf, &n, "  ·  ");
+        put(buf, &n, k.label());
+    }
+    for (pl.lsp.items) |*srv| {
+        if (n > 0) put(buf, &n, "  ·  ");
+        put(buf, &n, "LSP ");
+        put(buf, &n, srv.lang.slice());
+    }
+    return buf[0..n];
+}
+
+/// O erro em vermelho, quebrado em até 4 linhas.
+fn errorText(p: anytype, name: []const u8, msg: []const u8, x: f32, y: f32, w: f32) f32 {
+    const ctx = p.ctx;
+    const h = inbox.wrapText(p.dl, p.font(.regular), 13, x, y, w, msg, 4, ctx.col(.danger));
+    qa.mark(.{ .x = x, .y = y, .w = w, .h = h }, "plugin-error:{s}", .{name});
+    return y + h + 8;
+}

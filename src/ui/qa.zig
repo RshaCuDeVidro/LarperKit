@@ -1,0 +1,204 @@
+//! Marcações para os testes de QA: os componentes registram "onde está cada
+//! coisa" (ícone de servidor, canal, botão, item de menu…) e o robô de testes
+//! clica nesses retângulos com eventos reais de mouse e teclado.
+//! Desligado (custo zero) fora do modo `--qa`.
+const std = @import("std");
+const layout = @import("../theme/layout.zig");
+const insp = @import("../inspect/captura.zig");
+
+/// Só os builds com o robô (debug, ou -Dqa=true) têm isto; nos outros, cada
+/// marcação some na compilação (código, textos e os 300 KB de tabelas abaixo).
+pub const compiled = @import("build_options").qa;
+
+var enabled_now = false;
+
+pub inline fn on() bool {
+    return compiled and enabled_now;
+}
+
+pub fn enable() void {
+    enabled_now = compiled;
+}
+
+/// `clip`: o recorte da janela do ImGui onde a marcação foi feita. Uma linha da lista de
+/// canais pela metade embaixo do painel do usuário tem `rect` inteiro, mas só a parte de
+/// dentro do recorte recebe o clique.
+const Mark = struct { key: [56]u8, len: u8, rect: layout.Rect, clip: layout.Rect };
+
+// Com a tela dividida, até três conversas marcam ao mesmo tempo.
+var marks: [if (compiled) 2048 else 0]Mark = undefined;
+var count: usize = 0;
+/// Marcações do quadro anterior (o robô lê estas, já completas).
+var prev: [if (compiled) 2048 else 0]Mark = undefined;
+var prev_count: usize = 0;
+
+pub fn beginFrame() void {
+    if (!on()) return;
+    @memcpy(prev[0..count], marks[0..count]);
+    prev_count = count;
+    count = 0;
+}
+
+/// Prefixo das marcações desenhadas agora ("pane1/" num painel lateral da
+/// tela dividida): o mesmo elemento em duas conversas não se confunde.
+var scope_buf: [12]u8 = undefined;
+var scope_len: usize = 0;
+
+pub fn setScope(comptime fmt: []const u8, args: anytype) void {
+    if (!on()) return;
+    scope_len = if (std.fmt.bufPrint(&scope_buf, fmt, args)) |t| t.len else |_| 0;
+}
+
+/// Mais marcas num quadro do que cabem: avisa uma vez (senão um "elemento não
+/// encontrado" depois disso não teria explicação).
+var overflow_told = false;
+fn full() bool {
+    if (count < marks.len) return false;
+    if (!overflow_told) {
+        overflow_told = true;
+        std.log.warn("qa: mais de {d} marcas num quadro; as de depois não foram registradas", .{marks.len});
+    }
+    return true;
+}
+
+/// O Inspetor, num build com o robô, mostra o nome de cada coisa (e o ctl acha por ele).
+fn toInspector(r: layout.Rect, comptime fmt: []const u8, args: anytype) void {
+    if (!compiled or !insp.recording()) return;
+    var b: [72]u8 = undefined;
+    insp.mark(r, std.fmt.bufPrint(&b, fmt, args) catch return);
+}
+
+pub fn mark(r: layout.Rect, comptime fmt: []const u8, args: anytype) void {
+    toInspector(r, fmt, args);
+    if (!on() or full()) return;
+    const C = @import("c");
+    const dl = C.ImGui_GetWindowDrawList();
+    const lo = C.ImDrawList_GetClipRectMin(dl);
+    const hi = C.ImDrawList_GetClipRectMax(dl);
+    var m: Mark = .{ .key = undefined, .len = 0, .rect = r, .clip = .{ .x = lo.x, .y = lo.y, .w = hi.x - lo.x, .h = hi.y - lo.y } };
+    @memcpy(m.key[0..scope_len], scope_buf[0..scope_len]);
+    const s = std.fmt.bufPrint(m.key[scope_len..], fmt, args) catch return;
+    m.len = @intCast(scope_len + s.len);
+    marks[count] = m;
+    count += 1;
+}
+
+/// Como `mark`, para o que é desenhado fora de qualquer janela do ImGui (por cima de
+/// tudo): não pede a janela atual, que fora de uma janela é a "Debug" escondida do
+/// ImGui; pedir a lista de desenho dela a mostra na tela, e ela engole os cliques.
+pub fn markTop(r: layout.Rect, comptime fmt: []const u8, args: anytype) void {
+    toInspector(r, fmt, args);
+    if (!on() or full()) return;
+    var m: Mark = .{ .key = undefined, .len = 0, .rect = r, .clip = .{ .x = -100_000, .y = -100_000, .w = 200_000, .h = 200_000 } };
+    @memcpy(m.key[0..scope_len], scope_buf[0..scope_len]);
+    const s = std.fmt.bufPrint(m.key[scope_len..], fmt, args) catch return;
+    m.len = @intCast(scope_len + s.len);
+    marks[count] = m;
+    count += 1;
+}
+
+pub fn find(key: []const u8) ?layout.Rect {
+    // A última marcação com o nome vence (o que foi desenhado por cima).
+    var i = prev_count;
+    while (i > 0) {
+        i -= 1;
+        if (std.mem.eql(u8, prev[i].key[0..prev[i].len], key)) return prev[i].rect;
+    }
+    return null;
+}
+
+/// A parte da marcação que aparece de verdade (dentro do recorte da janela dela), ou
+/// null quando ela está toda escondida.
+pub fn visiblePart(key: []const u8) ?layout.Rect {
+    var i = prev_count;
+    while (i > 0) {
+        i -= 1;
+        const m = &prev[i];
+        if (!std.mem.eql(u8, m.key[0..m.len], key)) continue;
+        const x0 = @max(m.rect.x, m.clip.x);
+        const y0 = @max(m.rect.y, m.clip.y);
+        const x1 = @min(m.rect.right(), m.clip.right());
+        const y1 = @min(m.rect.bottom(), m.clip.bottom());
+        if (x1 - x0 < 1 or y1 - y0 < 1) return null;
+        return .{ .x = x0, .y = y0, .w = x1 - x0, .h = y1 - y0 };
+    }
+    return null;
+}
+
+/// Alguma marcação com o nome que tem o centro dentro de `r` (o mesmo nome pode
+/// estar em vários lugares: a foto de alguém na lista e na mensagem).
+pub fn anyIn(key: []const u8, r: layout.Rect) bool {
+    for (prev[0..prev_count]) |m| {
+        if (!std.mem.eql(u8, m.key[0..m.len], key)) continue;
+        const cx = m.rect.x + m.rect.w / 2;
+        const cy = m.rect.y + m.rect.h / 2;
+        if (cx >= r.x and cx <= r.right() and cy >= r.y and cy <= r.bottom()) return true;
+    }
+    return false;
+}
+
+/// A primeira marcação com o nome (quando dois elementos têm o mesmo
+/// nome e se quer o de cima da página).
+pub fn findFirst(key: []const u8) ?layout.Rect {
+    for (prev[0..prev_count]) |m| {
+        if (std.mem.eql(u8, m.key[0..m.len], key)) return m.rect;
+    }
+    return null;
+}
+
+/// Nomes das marcações do quadro anterior que começam com algum dos
+/// prefixos (para a varredura "clicar em tudo").
+pub fn keysWith(prefixes: []const []const u8, out: [][56]u8, lens: []u8) usize {
+    var n: usize = 0;
+    for (prev[0..prev_count]) |m| {
+        const k = m.key[0..m.len];
+        const want = for (prefixes) |p| {
+            if (std.mem.startsWith(u8, k, p)) break true;
+        } else false;
+        // Nunca clica em "Sair" (encerraria a sessão no meio do roteiro).
+        const exit = std.mem.indexOf(u8, k, "Sair") != null or std.mem.indexOf(u8, k, "Log Out") != null;
+        if (!want or exit or n == out.len) continue;
+        const dup = for (out[0..n], lens[0..n]) |o, l| {
+            if (std.mem.eql(u8, o[0..l], k)) break true;
+        } else false;
+        if (dup) continue;
+        out[n] = m.key;
+        lens[n] = m.len;
+        n += 1;
+    }
+    return n;
+}
+
+/// Duas marcações, entre as que começam com algum dos prefixos, que estão uma em
+/// cima da outra (o texto de um botão sumindo embaixo do que veio depois).
+pub fn overlapping(prefixes: []const []const u8) ?[2]layout.Rect {
+    const has = struct {
+        fn f(m: *const Mark, ps: []const []const u8) bool {
+            for (ps) |p| if (std.mem.startsWith(u8, m.key[0..m.len], p)) return true;
+            return false;
+        }
+    }.f;
+    // Encostar não conta: bordas somadas com arredondamento.
+    const slack: f32 = 1;
+    for (prev[0..prev_count], 0..) |*a, i| {
+        if (!has(a, prefixes)) continue;
+        for (prev[i + 1 .. prev_count]) |*b| {
+            if (!has(b, prefixes)) continue;
+            const ra = a.rect;
+            const rb = b.rect;
+            if (ra.x + slack < rb.right() and rb.x + slack < ra.right() and ra.y + slack < rb.bottom() and rb.y + slack < ra.bottom()) {
+                if (@import("c").SDL_getenv("QA_DEBUG") != null) std.debug.print("[sobreposição] {s} × {s}\n", .{ a.key[0..a.len], b.key[0..b.len] });
+                return .{ ra, rb };
+            }
+        }
+    }
+    return null;
+}
+
+/// Lista as marcações que começam com `prefix` (para depurar um teste).
+pub fn dump(prefix: []const u8) void {
+    for (prev[0..prev_count]) |m| {
+        const k = m.key[0..m.len];
+        if (std.mem.startsWith(u8, k, prefix)) std.debug.print("  {s} @ {d:.0},{d:.0} {d:.0}x{d:.0}\n", .{ k, m.rect.x, m.rect.y, m.rect.w, m.rect.h });
+    }
+}
