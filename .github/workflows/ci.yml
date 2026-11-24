@@ -1,0 +1,35 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
+      - run: zig build test --summary all
+
+  # Os testes saem do Linux para Windows (x86_64-windows-gnu) e rodam num Windows de verdade.
+  windows-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
+      - run: zig build test-bin -Dtarget=x86_64-windows-gnu -p out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-tests
+          path: out/bin/
+
+  windows-test:
+    needs: windows-build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-tests
+          path: bin
+      - run: bin\larperkit-test.exe
