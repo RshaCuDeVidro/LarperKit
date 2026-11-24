@@ -23,6 +23,53 @@ larperNotes started from a copy of larperCord's base, and the two copies have dr
 
 LarperKit keeps that base in one place. An app imports it and gets themes, components and plugins. The app writes only what is its own: its screens, the components its themes can style, and what its plugins are allowed to do.
 
+## Using it in an app
+
+Add the kit to your `build.zig.zon` (pin a tag; see [CHANGELOG.md](CHANGELOG.md)):
+
+```sh
+zig fetch --save git+https://github.com/RshaCuDeVidro/LarperKit#v0.1.0
+```
+
+Then, in `build.zig`, import the module. It brings Dear ImGui, the SDL3 backends and SDL3
+itself (on Windows, downloaded by the build; on Linux, the system's `sdl3` through pkg-config):
+
+```zig
+const kit = b.dependency("larperkit", .{ .target = target, .optimize = optimize });
+exe.root_module.addImport("larperkit", kit.module("larperkit"));
+@import("larperkit").installSdl(b, kit); // SDL3.dll next to the .exe on Windows
+// Translations, if the app has an i18n/ folder with <code>.kdl files:
+exe.root_module.addImport("translations", @import("larperkit").translations(b, kit.builder, "i18n"));
+```
+
+And open a window. The loop sleeps while nothing changes and wakes for input, for an animation
+or for `lk.window.wake(code)` from another thread:
+
+```zig
+const lk = @import("larperkit");
+
+pub fn main(init: std.process.Init) !void {
+    lk.app.name = "My app";       // in messages
+    lk.app.folder = "my-app";     // ~/.config/my-app, %APPDATA%\my-app
+    lk.components.register();
+    var theme = try lk.theme.load(init.gpa, @embedFile("theme.kdl"), null, null);
+    defer theme.deinit();
+    var state: State = .{};
+    try lk.window.run(.{ .title = "My app", .theme = &theme }, &state, draw);
+}
+
+fn draw(s: *State, ctx: *lk.draw.Ctx) void {
+    var p: lk.components.Page = .{ .ctx = ctx, .dl = ctx.dl, .x = 40, .y = 40, .w = 480, .scope = lk.id("main", 0) };
+    p.title("Hello");
+    p.toggle("Compact mode", "", &s.compact);
+}
+```
+
+[`examples/hello`](examples/hello) is a complete app built this way. Build options of the
+`larperkit` dependency: `.imgui = false` for an app that compiles its own Dear ImGui,
+`.link_sdl = false` for one that links SDL3 its own way, `.qa = true` for the visual test marks
+(on by default in Debug only).
+
 ## Examples
 
 Drawn by the gallery ([`examples/vitrine`](examples/vitrine/main.zig)) without opening a window. More in **[EXAMPLES.md](EXAMPLES.md)**.

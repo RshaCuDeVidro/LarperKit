@@ -55,6 +55,12 @@ first button with the mouse over it):
 
 ![The parts block of the neon theme and the components it restyles](docs/images/parts-en.png)
 
+## A minimal app
+
+[`examples/hello`](examples/hello) is a separate Zig project that depends on the kit through its
+`build.zig.zon`, the way any app does: a window that only draws when something changes, a theme,
+a form page, and a clock that another thread updates with `lk.window.wake`.
+
 ## Making them again
 
 ```sh

@@ -39,6 +39,13 @@ for that move; larperCord's move is the reference, since most of the code came f
 | the keychain entries `larpercord-account`, `larpercord`, `larpercord-plugin` (and `larperCord/account/*`, `larperCord/plugin/*` on Windows) | `apagar.chaves = &.{ "account", "", "plugin" }` with `lk.app.name = "larperCord"` and `lk.app.folder = "larpercord"` |
 | `"--apagar-resto"` | `apagar.flag_resto`; the app's command line still calls `apagar.resto(pid)` |
 
+## Window (`src/platform/window.zig`)
+
+| Before (larperCord) | After (LarperKit) |
+| --- | --- |
+| `platform/window.zig` (`Window.init`, `contentScale`, `wake`) and the sleeping loop in `app.zig` | `lk.window` has the same window opening, scale and wake, and `lk.window.run` sleeps the same way (`anim.napFor`, `SDL_WaitEvent`). larperCord can keep its own loop (it does much more: tray, floating window, recording) and use only `lk.window.contentScale` and `wake`, or move to `run` later |
+| `Wake` codes (`gateway`, `theme`, …) | the app's own numbers, passed to `lk.window.wake(code)` and received in `Options.on_wake` |
+
 ## Before larperCord switches
 
 The kit's components must draw the same as larperCord, checked image to image: draw a page with
