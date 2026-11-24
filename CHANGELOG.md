@@ -3,6 +3,11 @@
 Every version of LarperKit, newest first. The API still changes whenever an app needs it to:
 pin a version in your `build.zig.zon` and read the **Breaking** list before moving to the next.
 
+## 0.1.2 (2026-11-24)
+
+- **Fixed:** building for Windows still failed in 0.1.1: the SDL3 headers were looked up under
+  a folder that the downloaded package doesn't have.
+
 ## 0.1.1 (2026-11-24)
 
 - **Fixed:** building for Windows failed with "hash mismatch" on the SDL3 package: 0.1.0 had

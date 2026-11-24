@@ -149,7 +149,7 @@ pub fn build(b: *std.Build) void {
     const sdl_mingw = b.option([]const u8, "sdl_mingw", "Pasta x86_64-w64-mingw32 da SDL3 do MinGW já extraída (padrão: a que o build baixa)");
     const win_sdl: ?std.Build.LazyPath = if (!windows or sdl_include != null) null else if (sdl_mingw) |dir| .{ .cwd_relative = dir } else blk: {
         const dep = b.lazyDependency("sdl3_mingw", .{}) orelse break :blk null;
-        break :blk dep.path("SDL3-3.4.20/x86_64-w64-mingw32");
+        break :blk dep.path("x86_64-w64-mingw32");
     };
 
     // Headers C (SDL3, Dear ImGui, libc) traduzidos num módulo Zig.
