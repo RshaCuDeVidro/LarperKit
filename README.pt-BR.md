@@ -28,7 +28,7 @@ O LarperKit guarda essa base num lugar só. Um app importa o kit e ganha temas, 
 Ponha o kit no `build.zig.zon` (fixe uma tag; veja o [CHANGELOG.md](CHANGELOG.md)):
 
 ```sh
-zig fetch --save git+https://github.com/RshaCuDeVidro/LarperKit#v0.1.0
+zig fetch --save git+https://github.com/RshaCuDeVidro/LarperKit#v0.1.1
 ```
 
 Depois, no `build.zig`, importe o módulo. Ele já traz o Dear ImGui, os backends da SDL3 e a

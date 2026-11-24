@@ -3,8 +3,8 @@
 # Fica em $LARPERKIT_DEPS/sdl3-linux (padrão: .deps/sdl3-linux); depois:
 #   export PKG_CONFIG_PATH=$LARPERKIT_DEPS/sdl3-linux/lib/pkgconfig
 #   export LD_LIBRARY_PATH=$LARPERKIT_DEPS/sdl3-linux/lib
-# Sem os pacotes de X11 e Wayland, ela sai só com os drivers offscreen e dummy, que bastam
-# para os testes e para a vitrine.
+# Sem X11 nem Wayland (SDL_UNIX_CONSOLE_BUILD): só os drivers offscreen e dummy, que bastam
+# para os testes, a vitrine e o exemplo. Para abrir janela de verdade, a SDL3 do sistema.
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 out="${LARPERKIT_DEPS:-$here/.deps}"
@@ -20,7 +20,8 @@ t=$(mktemp -d -p "$out")
 trap 'rm -rf "$t"' EXIT
 tar -xf "$f" -C "$t"
 cmake -S "$t"/SDL3-3.4.20 -B "$t/build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$prefix" \
-    -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST_LIBRARY=OFF -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF >/dev/null
+    -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST_LIBRARY=OFF -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF \
+    -DSDL_UNIX_CONSOLE_BUILD=ON -DSDL_X11=OFF -DSDL_WAYLAND=OFF >/dev/null
 cmake --build "$t/build" -j"${JOBS:-2}" >/dev/null
 cmake --install "$t/build" >/dev/null
 echo "SDL3 em $prefix"

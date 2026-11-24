@@ -145,11 +145,12 @@ pub fn build(b: *std.Build) void {
     // desliga e liga a dele.
     const link_sdl = b.option(bool, "link_sdl", "Liga a SDL3 no módulo (padrão: sim)") orelse true;
     // A SDL3 do Windows (a do MinGW): o build baixa sozinho, pelo build.zig.zon, quando o alvo
-    // é Windows.
-    const win_sdl: ?std.Build.LazyPath = if (windows and sdl_include == null) blk: {
+    // é Windows. Sem rede, -Dsdl_mingw aponta para ela já extraída (a pasta x86_64-w64-mingw32).
+    const sdl_mingw = b.option([]const u8, "sdl_mingw", "Pasta x86_64-w64-mingw32 da SDL3 do MinGW já extraída (padrão: a que o build baixa)");
+    const win_sdl: ?std.Build.LazyPath = if (!windows or sdl_include != null) null else if (sdl_mingw) |dir| .{ .cwd_relative = dir } else blk: {
         const dep = b.lazyDependency("sdl3_mingw", .{}) orelse break :blk null;
         break :blk dep.path("SDL3-3.4.20/x86_64-w64-mingw32");
-    } else null;
+    };
 
     // Headers C (SDL3, Dear ImGui, libc) traduzidos num módulo Zig.
     const translate = b.addTranslateC(.{
