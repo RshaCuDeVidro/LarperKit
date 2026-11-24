@@ -1,7 +1,8 @@
 # Origins
 
 Where every file in this repository came from, so fixes can be ported in both directions.
-Files not listed here were written for LarperKit.
+Files not listed here were written for LarperKit. Files under `pendente/` came over but don't
+compile in the kit yet (see [pendente/README.md](pendente/README.md)).
 
 To see what changed upstream since a file was copied, run `git diff <commit>..<newer> -- <path>`
 in the source repository.
@@ -56,51 +57,51 @@ in both repositories.
 | `src/ui/camada.zig` | |
 | `src/ui/carimbo.zig` | |
 | `src/ui/display_text.zig` | |
-| `src/ui/dropdown.zig` | |
-| `src/ui/font_blocks.zig` | |
-| `src/ui/font_metrics.cpp` | |
-| `src/ui/font_names.zig` | |
-| `src/ui/fonts.zig` | |
-| `src/ui/fuzzy.zig` | |
+| `pendente/src/ui/dropdown.zig` | |
+| `pendente/src/ui/font_blocks.zig` | |
+| `pendente/src/ui/font_metrics.cpp` | |
+| `pendente/src/ui/font_names.zig` | |
+| `pendente/src/ui/fonts.zig` | |
+| `pendente/src/ui/fuzzy.zig` | |
 | `src/ui/i18n_xx.kdl` | |
 | `src/ui/icons.zig` | |
-| `src/ui/ime.zig` | |
+| `pendente/src/ui/ime.zig` | |
 | `src/ui/parts.zig` | |
-| `src/ui/plugin_confirm.zig` | |
-| `src/ui/plugin_panel.zig` | |
-| `src/ui/plugins_page.zig` | |
+| `pendente/src/ui/plugin_confirm.zig` | |
+| `pendente/src/ui/plugin_panel.zig` | |
+| `pendente/src/ui/plugins_page.zig` | |
 | `src/ui/qa.zig` | |
 | `src/ui/quadro.zig` | |
-| `src/ui/syntax.zig` | |
+| `pendente/src/ui/syntax.zig` | |
 | `src/ui/tint.zig` | |
-| `src/ui/wallpaper.zig` | |
+| `pendente/src/ui/wallpaper.zig` | |
 | `src/ui/wallpaper_fit.zig` | |
-| `src/ui/widgets.zig` | |
+| `pendente/src/ui/widgets.zig` | |
 | `src/inspect/captura.zig` | |
 | `src/inspect/ganchos.cpp` | the ImGui item hooks `captura.zig` reads |
 | `src/platform/apagar.zig` | |
-| `src/platform/fc_warm.zig` | |
+| `pendente/src/platform/fc_warm.zig` | |
 | `src/platform/fsutil.zig` | |
 | `src/platform/sys.zig` | |
-| `src/core/plain_letters.zig` | |
+| `pendente/src/core/plain_letters.zig` | |
 | `src/core/sort.zig` | |
-| `src/plugins/engine.zig` | |
-| `src/plugins/host.zig` | |
-| `src/plugins/http_curl.zig` | |
-| `src/plugins/http_policy.zig` | |
-| `src/plugins/json.zig` | |
-| `src/plugins/loc.zig` | |
-| `src/plugins/lua.zig` | |
-| `src/plugins/manifest.zig` | |
-| `src/plugins/panel.zig` | |
-| `src/plugins/runtime.zig` | |
-| `src/plugins/sync.zig` | |
-| `src/plugins/wire.zig` | |
-| `src/plugins/testdata/` | |
+| `pendente/src/plugins/engine.zig` | |
+| `pendente/src/plugins/host.zig` | |
+| `pendente/src/plugins/http_curl.zig` | |
+| `pendente/src/plugins/http_policy.zig` | |
+| `pendente/src/plugins/json.zig` | |
+| `pendente/src/plugins/loc.zig` | |
+| `pendente/src/plugins/lua.zig` | |
+| `pendente/src/plugins/manifest.zig` | |
+| `pendente/src/plugins/panel.zig` | |
+| `pendente/src/plugins/runtime.zig` | |
+| `pendente/src/plugins/sync.zig` | |
+| `pendente/src/plugins/wire.zig` | |
+| `pendente/src/plugins/testdata/` | |
 | `third_party/imgui/` | Dear ImGui with the changes marked `[larperCord]` |
 | `third_party/dcimgui/` | Dear Bindings (C API of Dear ImGui) |
-| `third_party/lua/` | Lua 5.4 |
-| `third_party/stb/` | stb_image and friends |
+| `pendente/third_party/lua/` | Lua 5.4 |
+| `pendente/third_party/stb/` | stb_image and friends |
 
 ### Test fixtures
 
@@ -123,8 +124,8 @@ and `zen.kdl` are `themes/classico.kdl` and `themes/zen.kdl` from `b5b3fc2`.
 
 | Path here | Path there | Notes |
 | --- | --- | --- |
-| `src/woofer/ui.zig` | `src/ui.zig` | Component API and behavior; the raylib drawing stays behind |
-| `src/woofer/LICENSE` | `LICENSE` | MIT, Copyright (c) 2026 RshaCuDeVidro |
+| `pendente/src/woofer/ui.zig` | `src/ui.zig` | Component API and behavior; the raylib drawing stays behind |
+| `pendente/src/woofer/LICENSE` | `LICENSE` | MIT, Copyright (c) 2026 RshaCuDeVidro |
 
-`src/woofer/ui.zig` is MIT-licensed (see `src/woofer/LICENSE`). It is reference material and is
+`pendente/src/woofer/ui.zig` is MIT-licensed (see `pendente/src/woofer/LICENSE`). It is reference material and is
 not part of the build while it depends on raylib.
