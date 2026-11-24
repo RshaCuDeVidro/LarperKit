@@ -12,9 +12,14 @@ const app = @import("../core/app.zig");
 /// $XDG_CONFIG_HOME/<pasta do app>/<nome> (ou ~/.config/<pasta do app>/<nome>);
 /// `nome` vazio dá a própria pasta.
 pub fn configPath(buf: []u8, name: []const u8) ?[:0]const u8 {
-    const sep: []const u8 = if (name.len > 0) "/" else "";
     var hb: [512]u8 = undefined;
     const base = sys.configHome(&hb) orelse return null;
+    return configPathIn(buf, base, name);
+}
+
+/// Como `configPath`, com a pasta de configurações do sistema já resolvida.
+pub fn configPathIn(buf: []u8, base: []const u8, name: []const u8) ?[:0]const u8 {
+    const sep: []const u8 = if (name.len > 0) "/" else "";
     return std.fmt.bufPrintSentinel(buf, "{s}/{s}{s}{s}", .{ base, app.pasta, sep, name }, 0) catch null;
 }
 

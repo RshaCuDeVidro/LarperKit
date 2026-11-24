@@ -65,8 +65,24 @@ pub fn pastas(out: *Pastas) void {
 fn put(out: *Pastas, i: usize, base: []const u8) void {
     // Só caminho absoluto: um XDG_CONFIG_HOME relativo apagaria a partir da pasta atual.
     if (!absolute(base)) return;
-    const p = std.fmt.bufPrintSentinel(&out.buf[i], "{s}/{s}", .{ base, app.pasta }, 0) catch return;
+    const p = pastaEm(&out.buf[i], base) orelse return;
     out.len[i] = p.len;
+}
+
+/// A pasta do app dentro de `base` (a de configurações ou a do cache do sistema).
+pub fn pastaEm(buf: []u8, base: []const u8) ?[:0]const u8 {
+    return std.fmt.bufPrintSentinel(buf, "{s}/{s}", .{ base, app.pasta }, 0) catch null;
+}
+
+/// O que apaga uma entrada de `chaves`: o filtro do Gerenciador de Credenciais
+/// (`no_windows`) ou o comando do secret-tool.
+pub fn apagaChave(buf: []u8, nome: []const u8, no_windows: bool) ?[:0]const u8 {
+    if (no_windows) {
+        const sep: []const u8 = if (nome.len > 0) "/" else "";
+        return std.fmt.bufPrintSentinel(buf, "{s}{s}{s}/*", .{ app.nome, sep, nome }, 0) catch null;
+    }
+    const dash: []const u8 = if (nome.len > 0) "-" else "";
+    return std.fmt.bufPrintSentinel(buf, "secret-tool clear service {s}{s}{s} 2>/dev/null", .{ app.pasta, dash, nome }, 0) catch null;
 }
 
 fn absolute(p: []const u8) bool {
@@ -141,9 +157,8 @@ pub fn permitida(p: [:0]const u8) bool {
 fn chaveiro() void {
     for (chaves) |nome| {
         var b: [256]u8 = undefined;
-        const sep: []const u8 = if (nome.len > 0) "/" else "";
         if (windows) {
-            const filter = std.fmt.bufPrintSentinel(&b, "{s}{s}{s}/*", .{ app.nome, sep, nome }, 0) catch continue;
+            const filter = apagaChave(&b, nome, true) orelse continue;
             if (qa_mode) {
                 std.log.info("apagar: no QA o Gerenciador de Credenciais fica ({s})", .{filter});
                 continue;
@@ -155,8 +170,7 @@ fn chaveiro() void {
             for (0..count) |i| _ = c.CredDeleteA(list[i].*.TargetName, list[i].*.Type, 0);
             continue;
         }
-        const dash: []const u8 = if (nome.len > 0) "-" else "";
-        const cmd = std.fmt.bufPrintSentinel(&b, "secret-tool clear service {s}{s}{s} 2>/dev/null", .{ app.pasta, dash, nome }, 0) catch continue;
+        const cmd = apagaChave(&b, nome, false) orelse continue;
         if (qa_mode) {
             std.log.info("apagar: no QA o chaveiro fica ({s})", .{cmd});
             continue;

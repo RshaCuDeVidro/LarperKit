@@ -314,6 +314,11 @@ fn isDir(path: [:0]const u8) bool {
 pub fn configDir(gpa: std.mem.Allocator) ?[:0]u8 {
     var hb: [512]u8 = undefined;
     const base = sys.configHome(&hb) orelse return null;
+    return configDirIn(gpa, base);
+}
+
+/// Como `configDir`, com a pasta de configurações do sistema já resolvida.
+pub fn configDirIn(gpa: std.mem.Allocator, base: []const u8) ?[:0]u8 {
     return std.fmt.allocPrintSentinel(gpa, "{s}/{s}/themes", .{ base, app.pasta }, 0) catch null;
 }
 

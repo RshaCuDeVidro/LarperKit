@@ -37,3 +37,12 @@ for that move; larperCord's move is the reference, since most of the code came f
 | `apagar` removing the old token (`~/.config/larpercord/token`) | the app does it in `apagar.outros` (with `apagar.permitida`) |
 | the keychain entries `larpercord-account`, `larpercord`, `larpercord-plugin` (and `larperCord/account/*`, `larperCord/plugin/*` on Windows) | `apagar.chaves = &.{ "account", "", "plugin" }` with `lk.app.nome = "larperCord"` and `lk.app.pasta = "larpercord"` |
 | `"--apagar-resto"` | `apagar.flag_resto`; the app's command line still calls `apagar.resto(pid)` |
+
+## Before larperCord switches
+
+The test "os nomes do larperCord saem iguais" in `src/core/app.zig` must pass. With
+`lk.app.nome = "larperCord"` and `lk.app.pasta = "larpercord"`, it checks byte by byte the
+keychain entries and the folders the kit builds against the strings in larperCord `b5b3fc2`.
+A different name means people lose their login, their plugin secrets and their settings on
+update, and "Delete all data" leaves things behind. When the plugin runtime moves (its secrets
+are `larpercord-plugin` and `larperCord/plugin/<plugin>/<key>`), its names join that test.
