@@ -1,25 +1,26 @@
 //! Lista, carrega e recarrega temas.
 //!
 //! Ordem de busca (o último com o mesmo nome vence):
-//!   1. temas embutidos no executável
+//!   1. temas embutidos no executável (os que o app passou em `bases.embutidos`)
 //!   2. ./themes            (ao rodar de dentro do repositório)
-//!   3. $XDG_CONFIG_HOME/larpercord/themes  (ou ~/.config/larpercord/themes)
+//!   3. $XDG_CONFIG_HOME/<pasta do app>/themes  (ou ~/.config/<pasta do app>/themes)
 //!
 //! As pastas são vigiadas com inotify: salvar um .kdl recarrega na hora.
 const std = @import("std");
 const sys = @import("../platform/sys.zig");
 const vigia = @import("../platform/vigia.zig");
 const c = @import("c");
-const builtin_themes = @import("builtin_themes");
 const theme = @import("theme.zig");
 const bases = @import("bases.zig");
+const app = @import("../core/app.zig");
 const Rgba = theme.Rgba;
 
 pub const Preview = struct {
     name: []const u8,
     description: []const u8,
     description_en: []const u8 = "",
-    kind: @import("schema.zig").Preview,
+    /// A miniatura que o tema pediu (`preview=`), entre as que o app registrou.
+    kind: []const u8,
     bg: Rgba,
     rail: Rgba,
     sidebar: Rgba,
@@ -114,7 +115,7 @@ pub const Manager = struct {
         const keep = if (m.current < m.entries.items.len) try m.gpa.dupe(u8, m.entries.items[m.current].name) else null;
         defer if (keep) |k| m.gpa.free(k);
         m.clearEntries();
-        for (builtin_themes.list) |b| try m.put(.{ .name = try m.gpa.dupe(u8, b.name), .builtin = b.source });
+        for (bases.embutidos) |b| try m.put(.{ .name = try m.gpa.dupe(u8, b.name), .builtin = b.source });
         for (m.dirs.items) |dir| try m.scanDir(dir);
         for (m.entries.items) |e| try m.names.append(m.gpa, e.name);
         m.previews_stale = true;
@@ -152,7 +153,7 @@ pub const Manager = struct {
             const dirs = m.baseDirs(&order);
             var idb: [80]u8 = undefined;
             var t = theme.loadWith(m.gpa, src, m.withBases(m.loadOptions(e.name), &dirs, e, &idb), null) catch {
-                m.previews.append(m.gpa, .{ .name = e.name, .description = "(erro ao carregar)", .kind = .classic, .bg = Rgba.black, .rail = Rgba.black, .sidebar = Rgba.black, .surface = Rgba.black, .elevated = Rgba.black, .accent = Rgba.white, .text = Rgba.white, .bubble = Rgba.white, .transparent = false }) catch {};
+                m.previews.append(m.gpa, .{ .name = e.name, .description = "(erro ao carregar)", .kind = "", .bg = Rgba.black, .rail = Rgba.black, .sidebar = Rgba.black, .surface = Rgba.black, .elevated = Rgba.black, .accent = Rgba.white, .text = Rgba.white, .bubble = Rgba.white, .transparent = false }) catch {};
                 continue;
             };
             defer t.deinit();
@@ -160,7 +161,7 @@ pub const Manager = struct {
                 .name = e.name,
                 .description = a.dupe(u8, t.description) catch "",
                 .description_en = a.dupe(u8, t.description_en) catch "",
-                .kind = std.meta.stringToEnum(@FieldType(Preview, "kind"), t.preview) orelse .classic,
+                .kind = a.dupe(u8, t.preview) catch "",
                 .bg = t.c(.bg),
                 .rail = t.c(.rail),
                 .sidebar = t.c(.sidebar),
@@ -313,7 +314,7 @@ fn isDir(path: [:0]const u8) bool {
 pub fn configDir(gpa: std.mem.Allocator) ?[:0]u8 {
     var hb: [512]u8 = undefined;
     const base = sys.configHome(&hb) orelse return null;
-    return std.fmt.allocPrintSentinel(gpa, "{s}/larpercord/themes", .{base}, 0) catch null;
+    return std.fmt.allocPrintSentinel(gpa, "{s}/{s}/themes", .{ base, app.pasta }, 0) catch null;
 }
 
 /// Lê um tema inteiro para `a` (as bases de `extends`, o --theme-check, o LSP).

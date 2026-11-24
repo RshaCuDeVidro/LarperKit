@@ -10,8 +10,6 @@
         "src",
         "third_party",
         "tools",
-        "themes",
-        "i18n",
         "LICENSE",
         "README.md",
     },

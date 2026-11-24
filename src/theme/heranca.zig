@@ -15,6 +15,7 @@
 const std = @import("std");
 const kdl = @import("kdl.zig");
 const schema = @import("schema.zig");
+const app = @import("../core/app.zig");
 
 pub const max_depth = 4;
 
@@ -164,7 +165,7 @@ fn apiOf(cx: *Cx, file: u8) Error!u8 {
     if (v < 1 or v != @floor(v))
         return cx.fail(file, n.line, n.col, "theme-api {d} isn't a version (1 or {d})", .{ v, schema.api_supported });
     if (v > schema.api_supported)
-        return cx.fail(file, n.line, n.col, "theme-api {d} needs a newer larperCord (this one reads up to {d})", .{ v, schema.api_supported });
+        return cx.fail(file, n.line, n.col, "theme-api {d} needs a newer {s} (this one reads up to {d})", .{ v, app.nome, schema.api_supported });
     return @intFromFloat(v);
 }
 
@@ -560,7 +561,11 @@ fn eqColor(want: u32, got: theme.Rgba) !void {
     try testing.expectApproxEqAbs(w.b, got.b, 0.003);
 }
 
+/// Os componentes, as partes e os temas do larperCord, registrados como um app faria.
+const cord = @import("exemplo_cord.zig");
+
 test "extends: cada regra de junção" {
+    cord.registrar();
     const mem: Mem = .{ .files = &.{.{ "base-a", base_a }} };
     const filho =
         \\extends "base-a"
@@ -614,6 +619,7 @@ test "extends: cada regra de junção" {
 }
 
 test "extends: palette, roles e layout do filho trocam os da base inteiros" {
+    cord.registrar();
     const mem: Mem = .{ .files = &.{.{ "base-a", base_a }} };
     var t = try load(
         \\extends "base-a"
@@ -632,15 +638,17 @@ test "extends: palette, roles e layout do filho trocam os da base inteiros" {
 }
 
 test "extends: um embutido, e o nome do próprio tema leva ao embutido" {
+    cord.registrar();
     const mem: Mem = .{ .files = &.{.{ "classico", "extends \"classico\"\ncolors { accent \"#ff00aa\" }" }} };
     var t = try theme.loadWith(testing.allocator, "extends \"classico\"\ncolors { accent \"#ff00aa\" }", .{ .bases = mem.bases_(), .self = "mem:classico" }, null);
     defer t.deinit();
     try eqColor(0xff00aa, t.c(.accent));
-    try testing.expect(t.has_user_panel);
+    try testing.expect(theme.hasNode(t.layout.?, "user-panel"));
     try testing.expectEqual(@as(usize, 0), t.warnings.len);
 }
 
 test "extends: base desconhecida, laço e fundo demais dão erro com a linha" {
+    cord.registrar();
     const mem: Mem = .{ .files = &.{
         .{ "x", "extends \"y\"\nlayout { messages }" },
         .{ "y", "extends \"x\"" },
@@ -674,6 +682,7 @@ test "extends: base desconhecida, laço e fundo demais dão erro com a linha" {
 }
 
 test "vars: número, cor, dentro de expressões, uma usando outra" {
+    cord.registrar();
     const mem: Mem = .{ .files = &.{} };
     var t = try load(
         \\vars { g 8; vermelho "#ff0000"; meio "mix($vermelho, #0000ff, 0.5)"; borda 2 }
@@ -694,6 +703,7 @@ test "vars: número, cor, dentro de expressões, uma usando outra" {
 }
 
 test "vars: o filho troca a da base, também nas cores que a base calcula" {
+    cord.registrar();
     const mem: Mem = .{ .files = &.{.{ "base-v", "vars { tom \"#ff0000\" }\ncolors { accent \"$tom\"; link \"mix($tom, white, 0.5)\" }\nlayout { messages }" }} };
     var t = try load("extends \"base-v\"\nvars { tom \"#00ff00\" }", .dark, &mem, null);
     defer t.deinit();
@@ -703,6 +713,7 @@ test "vars: o filho troca a da base, também nas cores que a base calcula" {
 }
 
 test "vars: mode=, nome igual a opção, indefinida, laço" {
+    cord.registrar();
     const mem: Mem = .{ .files = &.{} };
     const src = "vars { c \"#ff0000\" }\nvars mode=light { c \"#0000ff\" }\ncolors { accent \"$c\" }\nlayout { messages }";
     var dk = try load(src, .dark, &mem, null);
@@ -740,6 +751,7 @@ test "o mesmo arquivo com barras diferentes" {
 }
 
 test "temas sem extends nem vars ficam como eram (mesma ordem dos nós)" {
+    cord.registrar();
     const mem: Mem = .{ .files = &.{} };
     // Estilo antes das cores: avaliado com o accent de antes, como sempre foi.
     var t = try load("styles { style \"s\" bg=\"@accent\" }\ncolors { accent \"#ff0000\" }\nlayout { messages }", .dark, &mem, null);
@@ -748,6 +760,7 @@ test "temas sem extends nem vars ficam como eram (mesma ordem dos nós)" {
 }
 
 test "theme-api 2: o que seria aviso é erro e o tema não carrega; sem ele, ou com 1, é aviso" {
+    cord.registrar();
     const mem: Mem = .{ .files = &.{} };
     const body = "layout {\n  row {\n    messages varient=cozy\n  }\n}";
     inline for (.{ "", "theme-api 1\n" }) |head| {
@@ -785,11 +798,12 @@ test "theme-api 2: o que seria aviso é erro e o tema não carrega; sem ele, ou 
 }
 
 test "theme-api: versão que o app não lê, ou que não é um número, é erro no nó" {
+    cord.registrar();
     const mem: Mem = .{ .files = &.{} };
     var d: theme.Diagnostic = .{};
     try testing.expectError(error.InvalidTheme, load("layout { messages }\ntheme-api 3", .dark, &mem, &d));
     try testing.expectEqual(@as(u32, 2), d.line);
-    try testing.expect(std.mem.indexOf(u8, d.message, "needs a newer larperCord (this one reads up to 2)") != null);
+    try testing.expect(std.mem.indexOf(u8, d.message, "needs a newer LarperKit (this one reads up to 2)") != null);
     try testing.expectError(error.InvalidTheme, load("theme-api \"2\"\nlayout { messages }", .dark, &mem, &d));
     try testing.expect(std.mem.indexOf(u8, d.message, "as a number") != null);
     try testing.expectError(error.InvalidTheme, load("theme-api 1.5\nlayout { messages }", .dark, &mem, &d));
@@ -799,6 +813,7 @@ test "theme-api: versão que o app não lê, ou que não é um número, é erro 
 }
 
 test "theme-api vale só para o próprio arquivo, não para a base nem para quem a estende" {
+    cord.registrar();
     const mem: Mem = .{ .files = &.{
         .{ "base-estrita", "theme-api 2\nlayout {\n  messages tamanho=3\n}" },
         .{ "base-solta", "layout {\n  messages tamanho=3\n}" },

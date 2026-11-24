@@ -102,10 +102,6 @@ pub const Theme = struct {
     transparent: bool = false,
     styles: std.StringHashMapUnmanaged(Style) = .empty,
     layout: ?*const kdl.Node = null,
-    /// O layout tem o painel com o botão de configurações? Sem ele, o cabeçalho põe um.
-    has_user_panel: bool = true,
-    /// O layout tem lista de membros (o cabeçalho mostra o botão de esconder).
-    has_member_list: bool = true,
     /// Sobrescritas efetivas de cada nó (já incluindo as dos pais).
     node_colors: std.AutoHashMapUnmanaged(*const kdl.Node, []const Override) = .empty,
     /// Primitivas novas dos nós que usam alguma (`fx.zig`). Vazio na maioria.
@@ -154,15 +150,17 @@ pub const Theme = struct {
     }
 };
 
-/// Texto secundário legível em qualquer tema, inclusive os de outras pessoas: o traço fino das
-/// letras pequenas já perde contraste, e abaixo disto ele some no fundo. Sobe em direção à cor
-/// do texto só o quanto precisa, então a hierarquia texto > muted > faint continua.
-fn hasNode(n: *const kdl.Node, name: []const u8) bool {
+/// O layout tem um nó com esse nome em algum lugar? (O app pergunta pelos componentes dele:
+/// sem o painel com o botão de configurações, o cabeçalho põe um.)
+pub fn hasNode(n: *const kdl.Node, name: []const u8) bool {
     if (std.mem.eql(u8, n.name, name)) return true;
     for (n.children) |*ch| if (hasNode(ch, name)) return true;
     return false;
 }
 
+/// Texto secundário legível em qualquer tema, inclusive os de outras pessoas: o traço fino das
+/// letras pequenas já perde contraste, e abaixo disto ele some no fundo. Sobe em direção à cor
+/// do texto só o quanto precisa, então a hierarquia texto > muted > faint continua.
 fn legibleText(t: *Theme) void {
     const wanted = [_]struct { tok: Token, min: f32 }{ .{ .tok = .muted, .min = 5.5 }, .{ .tok = .faint, .min = 4.5 } };
     const backs = [_]Token{ .bg, .surface, .sidebar, .elevated };
@@ -395,8 +393,6 @@ pub fn loadWith(gpa: std.mem.Allocator, src: []const u8, lo: LoadOptions, diag: 
     }
     t.parts = try part_rules.finish(a);
     legibleText(&t);
-    t.has_user_panel = if (t.layout) |root| hasNode(root, "user-panel") else true;
-    t.has_member_list = if (t.layout) |root| hasNode(root, "member-list") else true;
     if (t.layout == null) return fail(diag, null, "o tema precisa de um nó `layout`");
     try collectOverrides(&t, a, t.layout.?, &.{}, resolver, lo.mode, diag);
     collectFx(&t, a, t.layout.?, &fcx) catch |err| return fxFail(err, fcx, diag);
@@ -554,7 +550,11 @@ fn lightDefaults(pal: *const [16]Rgba) std.EnumArray(Token, Rgba) {
     return e;
 }
 
+/// Os componentes, as partes e os temas do larperCord, registrados como um app faria.
+const cord = @import("exemplo_cord.zig");
+
 test "modo claro, opções e cores por modo" {
+    cord.registrar();
     const src =
         \\options { option "brilho" label="Brilho" default=#false }
         \\colors { accent "#ff0000" }
@@ -580,6 +580,7 @@ test "modo claro, opções e cores por modo" {
 }
 
 test "carrega tema com tokens, estilos e layout" {
+    cord.registrar();
     const src =
         \\theme "teste" description="só um teste"
         \\palette "#000000" "#ff0000"
@@ -602,12 +603,14 @@ test "carrega tema com tokens, estilos e layout" {
 }
 
 test "erro de tema aponta a linha" {
+    cord.registrar();
     var d: Diagnostic = .{};
     try std.testing.expectError(error.InvalidTheme, load(std.testing.allocator, "colors {\n  nao-existe \"#fff\"\n}\nlayout { messages }", null, &d));
     try std.testing.expectEqual(@as(u32, 2), d.line);
 }
 
 test "o que o esquema não conhece vira aviso, e o tema carrega assim mesmo" {
+    cord.registrar();
     var r: schema.Report = .{ .gpa = std.testing.allocator };
     defer r.deinit();
     var t = try loadWith(std.testing.allocator, "layout {\n  row {\n    messages tamanho=3\n    coisa\n  }\n}", .{ .report = &r }, null);
@@ -622,6 +625,7 @@ test "o que o esquema não conhece vira aviso, e o tema carrega assim mesmo" {
 }
 
 test "cores sobrescritas valem para os filhos" {
+    cord.registrar();
     var t = try load(std.testing.allocator,
         \\layout { column c-text="#ff0000" { messages; row c-muted="#00ff00" { composer } } }
     , null, null);
@@ -673,6 +677,7 @@ test "primitivas novas: estilo, nó e erro com a linha" {
 }
 
 test "modo vale como condição" {
+    cord.registrar();
     var t = try loadWith(std.testing.allocator, "layout { messages }", .{ .mode = .light }, null);
     defer t.deinit();
     try std.testing.expect(t.option("modo-claro").?);

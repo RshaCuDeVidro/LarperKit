@@ -62,6 +62,8 @@ pub const Prop = struct {
     option_ref: bool = false,
     /// Ajuste rápido no criador de temas do site.
     tweak: bool = false,
+    /// Os valores vêm do que os apps registraram (`previews`), não de `values`.
+    registered: bool = false,
 };
 
 /// Grupos de propriedades que vários nós têm.
@@ -127,12 +129,9 @@ pub const patterns = [_]Pattern{
     .{ .prefix = "cd-", .desc = "Like c-, only in dark mode." },
 };
 
-/// Miniaturas das Configurações (`theme … preview=`). manager.zig usa este enum.
-pub const Preview = enum { classic, glass, terminal, bubbles, zen, mirror, office, desktop };
-
 // --- Construtores das tabelas --------------------------------------------------
 
-const Opts = struct {
+pub const Opts = struct {
     min: ?f64 = null,
     max: ?f64 = null,
     range: ?[3]f64 = null,
@@ -142,29 +141,29 @@ const Opts = struct {
     pt: []const u8 = "",
 };
 
-fn num(key: []const u8, desc: []const u8, o: Opts) Prop {
+pub fn num(key: []const u8, desc: []const u8, o: Opts) Prop {
     return .{ .key = key, .kind = .number, .desc = desc, .pt = o.pt, .min = o.min, .max = o.max, .range = o.range, .default = o.def, .tweak = o.tweak };
 }
 
 /// Booleano lido com `d.pflag` (aceita `"$opção"`).
-fn flag(key: []const u8, desc: []const u8, o: Opts) Prop {
+pub fn flag(key: []const u8, desc: []const u8, o: Opts) Prop {
     return .{ .key = key, .kind = .boolean, .desc = desc, .pt = o.pt, .default = o.def, .tweak = o.tweak, .option_ref = true };
 }
 
 /// Booleano lido com `n.flag` (só `#true`/`#false`).
-fn plainFlag(key: []const u8, desc: []const u8, o: Opts) Prop {
+pub fn plainFlag(key: []const u8, desc: []const u8, o: Opts) Prop {
     return .{ .key = key, .kind = .boolean, .desc = desc, .pt = o.pt, .default = o.def, .tweak = o.tweak };
 }
 
-fn pick(key: []const u8, values: []const []const u8, desc: []const u8, o: Opts) Prop {
+pub fn pick(key: []const u8, values: []const []const u8, desc: []const u8, o: Opts) Prop {
     return .{ .key = key, .kind = .@"enum", .values = values, .desc = desc, .pt = o.pt, .default = o.def, .tweak = o.tweak };
 }
 
-fn of(kind: Kind, key: []const u8, desc: []const u8, o: Opts) Prop {
+pub fn of(kind: Kind, key: []const u8, desc: []const u8, o: Opts) Prop {
     return .{ .key = key, .kind = kind, .desc = desc, .pt = o.pt, .default = o.def, .tweak = o.tweak, .option_ref = o.option_ref };
 }
 
-fn fieldNames(comptime E: type) []const []const u8 {
+pub fn fieldNames(comptime E: type) []const []const u8 {
     const names = comptime blk: {
         const fields = @typeInfo(E).@"enum".field_names;
         var out: [fields.len][]const u8 = undefined;
@@ -309,7 +308,7 @@ pub fn setProps(s: Set) []const Prop {
 // --- Nós do topo -----------------------------------------------------------------
 
 const cond = &[_]Set{.condition};
-const layout_sets = &[_]Set{ .node, .component, .box };
+pub const layout_sets = &[_]Set{ .node, .component, .box };
 
 pub const top = [_]NodeSpec{
     .{
@@ -324,7 +323,7 @@ pub const top = [_]NodeSpec{
             of(.string, "description-en", "Description in English.", .{}),
             of(.string, "author", "Who made the theme.", .{}),
             of(.string, "license", "SPDX license identifier (the community gallery asks for one; the app ignores it).", .{}),
-            pick("preview", fieldNames(Preview), "Which thumbnail Settings draws for the theme.", .{ .def = .{ .text = "classic" } }),
+            .{ .key = "preview", .kind = .@"enum", .registered = true, .desc = "Which thumbnail Settings draws for the theme (the app lists them)." },
         },
     },
     .{
@@ -427,8 +426,8 @@ pub const top = [_]NodeSpec{
     .{
         .name = "parts",
         .role = .top,
-        .desc = "Pieces inside the components (message rows, channel rows, member rows, the message box), each with its own look per state: hover, selected, unread, mention, speaking, muted, offline, self. One part child per rule.",
-        .pt = "Partes de dentro dos componentes (linhas de mensagem, de canal, de membro, a caixa de texto), cada uma com o visual de cada estado: hover, selected, unread, mention, speaking, muted, offline, self. Um filho part por regra.",
+        .desc = "Pieces inside the components, each with its own look per state (hover, selected…). One part child per rule; the parts and states each app has are listed in its theme docs.",
+        .pt = "Partes de dentro dos componentes, cada uma com o visual de cada estado (hover, selected…). Um filho part por regra; as partes e os estados de cada app estão na documentação dos temas dele.",
         .sets = cond,
         .children = .{ .named = &.{"part"} },
     },
@@ -491,22 +490,16 @@ pub const child_specs = [_]NodeSpec{
         .name = "part",
         .role = .child,
         .parent = "parts",
-        .desc = "How a part looks, in all its states or only in some (\"message:hover\", \"channel.item:selected:hover\"). Each part takes only some of the properties: the list is in themes/README.md (Parts and states).",
-        .pt = "Como uma parte fica, em todos os estados ou só em alguns (\"message:hover\", \"channel.item:selected:hover\"). Cada parte aceita só algumas das propriedades: a lista está em themes/README.md (Partes e estados).",
+        .desc = "How a part looks, in all its states or only in some (\"button:hover\", \"list.item:selected:hover\"). Each part takes only some of the properties: the list is in the theme docs of each app (Parts and states).",
+        .pt = "Como uma parte fica, em todos os estados ou só em alguns (\"button:hover\", \"list.item:selected:hover\"). Cada parte aceita só algumas das propriedades: a lista está na documentação dos temas de cada app (Partes e estados).",
         .args = .{ .kind = .string, .desc = part_selector_desc },
         .props = &part_props,
     },
 };
 
-/// O nome do `part`: a parte e os estados, separados por `:` (de parts.zig).
-const part_selector_desc = blk: {
-    @setEvalBranchQuota(100_000);
-    var out: []const u8 = "The part, then its states separated by colons. Parts: ";
-    for (parts.partes, 0..) |p, i| out = std.fmt.comptimePrint("{s}{s}{s}", .{ out, if (i > 0) ", " else "", p.name });
-    out = std.fmt.comptimePrint("{s}. States: ", .{out});
-    for (parts.estados, 0..) |st, i| out = std.fmt.comptimePrint("{s}{s}{s}", .{ out, if (i > 0) ", " else "", st.name });
-    break :blk std.fmt.comptimePrint("{s}.", .{out});
-};
+/// O nome do `part`: a parte e os estados, separados por `:`. Quais existem é de cada app
+/// (parts.zig, `registrar`).
+const part_selector_desc = "The part, then its states separated by colons (\"button:hover\"). The parts and states each app has are listed in its theme docs.";
 
 /// As propriedades de `part`, com o tipo e a faixa da tabela `props` de parts.zig.
 const part_props = blk: {
@@ -549,120 +542,6 @@ fn color3(desc: []const u8) Prop {
 
 pub const components = [_]NodeSpec{
     .{
-        .name = "guild-bar",
-        .role = .component,
-        .desc = "The server bar.",
-        .pt = "A barra de servidores.",
-        .sets = layout_sets,
-        .props = &.{
-            pick("variant", &.{ "bar", "dock", "list" }, "Bar, macOS-style dock or list with names.", .{ .def = .{ .text = "bar" }, .tweak = true }),
-            pick("icon-style", fieldNames(enum { fill, soft, outline }), "How the server icons are filled.", .{ .def = .{ .text = "fill" }, .tweak = true }),
-            pick("orientation", &.{ "vertical", "horizontal" }, "Direction (default: by the node's shape).", .{ .tweak = true }),
-            pick("shape", &.{ "circle", "squircle", "square", "text" }, "Shape of the icons; text = tabs with the names.", .{ .def = .{ .text = "circle" }, .tweak = true }),
-            num("size", "Icon size (default 48; 36 horizontal, 40 dock, 26 list).", .{ .range = .{ 16, 80, 1 }, .def = .{ .num = 48 }, .tweak = true }),
-            flag("labels", "Names under the icons (horizontal bar).", .{ .def = .{ .flag = false }, .tweak = true }),
-            flag("home", "The home (DMs) button.", .{ .def = .{ .flag = true }, .tweak = true }),
-            flag("indicators", "Unread and selection marks.", .{ .def = .{ .flag = true }, .tweak = true }),
-            num("font-size", "Text size of shape=text tabs.", .{ .range = .{ 10, 24, 0.5 } }),
-        },
-    },
-    .{
-        .name = "channel-list",
-        .role = .component,
-        .desc = "The server's channels (or the DM list).",
-        .pt = "Os canais do servidor (ou a lista de DMs).",
-        .sets = layout_sets,
-        .props = &.{
-            pick("variant", &.{ "discord", "tree", "pills" }, "Look of the list.", .{ .def = .{ .text = "discord" }, .tweak = true }),
-            flag("header", "Server name at the top.", .{ .def = .{ .flag = true }, .tweak = true }),
-            flag("banner", "Colored banner with the server name (variant=discord).", .{ .def = .{ .flag = false }, .tweak = true }),
-        },
-    },
-    .{
-        .name = "user-panel",
-        .role = .component,
-        .desc = "Your name, status, mute/deafen and the settings button.",
-        .pt = "Seu nome, status, mudo/surdo e o botão de configurações.",
-        .sets = layout_sets,
-        .props = &.{pick("variant", &.{ "discord", "tty" }, "Look of the panel.", .{ .def = .{ .text = "discord" }, .tweak = true })},
-    },
-    .{
-        .name = "header",
-        .role = .component,
-        .desc = "Channel name, topic and buttons above the chat.",
-        .pt = "Nome do canal, tópico e botões em cima da conversa.",
-        .sets = layout_sets,
-        .props = &.{
-            pick("variant", &.{ "discord", "minimal", "tty" }, "Look of the header.", .{ .def = .{ .text = "discord" }, .tweak = true }),
-            flag("divider", "Line under the header.", .{ .def = .{ .flag = true }, .tweak = true }),
-        },
-    },
-    .{
-        .name = "tabs",
-        .role = .component,
-        .desc = "Open conversations as tabs.",
-        .pt = "Conversas abertas em abas.",
-        .sets = layout_sets,
-        .props = &.{pick("variant", &.{ "pills", "underline", "tty" }, "Look of the tabs.", .{ .def = .{ .text = "pills" }, .tweak = true })},
-    },
-    .{
-        .name = "messages",
-        .role = .component,
-        .desc = "The conversation (and the call screen when a voice channel is open).",
-        .pt = "A conversa (e a tela da call quando um canal de voz está aberto).",
-        .sets = layout_sets,
-        .props = &.{
-            pick("variant", &.{ "cozy", "irc", "bubbles" }, "Layout of the messages.", .{ .def = .{ .text = "cozy" }, .tweak = true }),
-            pick("avatar", &.{ "circle", "squircle", "square", "none" }, "Shape of the photos.", .{ .def = .{ .text = "circle" }, .tweak = true }),
-            num("avatar-size", "Photo size (default 40; 30 with bubbles).", .{ .range = .{ 16, 72, 1 }, .def = .{ .num = 40 }, .tweak = true }),
-            num("spacing", "Space between groups of messages.", .{ .range = .{ 0, 48, 1 }, .def = .{ .num = 16 }, .tweak = true }),
-            num("font-size", "Text size (default: the fonts size).", .{ .range = .{ 10, 24, 0.5 }, .tweak = true }),
-            flag("ruled", "Ruled paper.", .{ .def = .{ .flag = false }, .tweak = true }),
-            flag("margin-line", "Red margin line.", .{ .def = .{ .flag = false }, .tweak = true }),
-            flag("ticks", "\"Delivered ✓✓\" under your messages.", .{ .def = .{ .flag = false }, .tweak = true }),
-            flag("typing-bubble", "Typing bubble (variant=bubbles).", .{ .def = .{ .flag = false }, .tweak = true }),
-            of(.style, "call-style", "Named style for each tile of the call screen.", .{}),
-            num("call-tint", "How much of each person's photo color goes into the call tile.", .{ .min = 0, .max = 1, .range = .{ 0, 1, 0.01 }, .def = .{ .num = 0.22 } }),
-        },
-    },
-    .{
-        .name = "composer",
-        .role = .component,
-        .desc = "The text box.",
-        .pt = "A caixa de texto.",
-        .sets = layout_sets,
-        .props = &.{
-            pick("variant", &.{ "box", "pill", "prompt" }, "Look of the box.", .{ .def = .{ .text = "box" }, .tweak = true }),
-            flag("typing", "\"x is typing…\" above the box.", .{ .def = .{ .flag = true }, .tweak = true }),
-        },
-    },
-    .{
-        .name = "member-list",
-        .role = .component,
-        .desc = "Members of the server (or the profile in a DM).",
-        .pt = "Membros do servidor (ou o perfil numa DM).",
-        .sets = layout_sets,
-        .props = &.{pick("variant", &.{ "discord", "tty" }, "Look of the list.", .{ .def = .{ .text = "discord" }, .tweak = true })},
-    },
-    .{
-        .name = "status-bar",
-        .role = .component,
-        .desc = "A status line: connection, ping, memory, voice, theme, keys, clock.",
-        .pt = "Uma linha de status: conexão, ping, memória, voz, tema, atalhos, relógio.",
-        .sets = layout_sets,
-        .props = &.{
-            pick("variant", &.{ "pills", "tty", "plain" }, "Look of the bar.", .{ .def = .{ .text = "pills" }, .tweak = true }),
-            .{
-                .key = "items",
-                .kind = .words,
-                .values = &.{ "conn", "ping", "ram", "frame", "voice", "theme", "keys", "clock", "me", "mic", "deaf", "spacer" },
-                .desc = "What the bar shows, in order; after spacer it goes to the right. me, mic and deaf: your status and the mute/deafen buttons.",
-                .default = .{ .text = "conn ping ram voice spacer theme keys clock" },
-                .tweak = true,
-            },
-        },
-    },
-    .{
         .name = "label",
         .role = .component,
         .desc = "A line of text, with display typography (tracking, spans, shadow, outline, gradient).",
@@ -688,18 +567,6 @@ pub const components = [_]NodeSpec{
             num("text-gradient-angle", "Angle of the text gradient (default: horizontal).", .{ .range = .{ 0, 360, 1 }, .def = .{ .num = 0 } }),
         },
     },
-    .{
-        .name = "logo",
-        .role = .component,
-        .desc = "The app logo, in ASCII or as a wordmark.",
-        .pt = "O logo do app, em ASCII ou como texto.",
-        .sets = layout_sets,
-        .props = &.{
-            pick("variant", &.{ "wordmark", "ascii" }, "ASCII art or text.", .{ .def = .{ .text = "wordmark" }, .tweak = true }),
-            num("size", "Text size (default 17; 13 in ASCII).", .{ .range = .{ 8, 40, 1 }, .def = .{ .num = 17 }, .tweak = true }),
-        },
-    },
-    .{ .name = "topbar", .role = .component, .desc = "Top bar: back/forward between tabs, search and help.", .pt = "Barra de cima: voltar/avançar entre abas, busca e ajuda.", .sets = layout_sets },
     .{
         .name = "crt",
         .role = .component,
@@ -919,6 +786,80 @@ pub const components = [_]NodeSpec{
     .{ .name = "spacer", .role = .component, .desc = "Empty space.", .pt = "Espaço vazio.", .sets = layout_sets },
 };
 
+// --- Registro ----------------------------------------------------------------------
+
+/// O que um app (ou um módulo do kit) acrescenta ao esquema. O kit fica com os nós
+/// genéricos (`row`, `column`, `stack`, `label`, `shape`, os fundos…); cada app registra
+/// os componentes que os temas dele podem pôr no layout e as partes de dentro deles.
+pub const Extensao = struct {
+    componentes: []const NodeSpec = &.{},
+    /// Filhos dos componentes do app (como `span` dentro de `label`, com `parent`).
+    filhos: []const NodeSpec = &.{},
+    /// As partes, com os estados (parts.zig).
+    partes: ?*const parts.Conjunto = null,
+    /// Os valores de `theme … preview=`: as miniaturas das Configurações do app.
+    previews: []const []const u8 = &.{},
+};
+
+var extensoes: [8]*const Extensao = undefined;
+var n_extensoes: usize = 0;
+var preview_buf: [32][]const u8 = undefined;
+var n_previews: usize = 0;
+
+/// Junta uma extensão ao esquema (uma vez basta; repetir não faz nada). Só na thread da
+/// interface, antes de carregar temas.
+pub fn registrar(e: *const Extensao) void {
+    for (registradas()) |old| if (old == e) return;
+    std.debug.assert(n_extensoes < extensoes.len);
+    extensoes[n_extensoes] = e;
+    n_extensoes += 1;
+    if (e.partes) |p| parts.registrar(p);
+    for (e.previews) |pv| {
+        for (previews()) |old| {
+            if (std.mem.eql(u8, old, pv)) break;
+        } else if (n_previews < preview_buf.len) {
+            preview_buf[n_previews] = pv;
+            n_previews += 1;
+        }
+    }
+}
+
+pub fn registradas() []const *const Extensao {
+    return extensoes[0..n_extensoes];
+}
+
+/// As miniaturas que os apps registraram (vazio: `preview=` aceita qualquer nome).
+pub fn previews() []const []const u8 {
+    return preview_buf[0..n_previews];
+}
+
+/// Os valores de uma propriedade: os da tabela, ou os registrados.
+pub fn valuesOf(p: *const Prop) []const []const u8 {
+    return if (p.registered) previews() else p.values;
+}
+
+/// Os componentes do kit e os de cada app, um por vez.
+pub const Componentes = struct {
+    ext: usize = 0,
+    i: usize = 0,
+
+    pub fn next(it: *Componentes) ?*const NodeSpec {
+        while (true) {
+            const list: []const NodeSpec = if (it.ext == 0) &components else if (it.ext <= n_extensoes) extensoes[it.ext - 1].componentes else return null;
+            if (it.i < list.len) {
+                it.i += 1;
+                return &list[it.i - 1];
+            }
+            it.ext += 1;
+            it.i = 0;
+        }
+    }
+};
+
+pub fn componentes() Componentes {
+    return .{};
+}
+
 // --- Consultas ---------------------------------------------------------------------
 
 fn findIn(list: []const NodeSpec, name: []const u8) ?*const NodeSpec {
@@ -932,7 +873,10 @@ pub fn topSpec(name: []const u8) ?*const NodeSpec {
 
 /// Contêiner ou componente.
 pub fn layoutSpec(name: []const u8) ?*const NodeSpec {
-    return findIn(&containers, name) orelse findIn(&components, name);
+    if (findIn(&containers, name)) |s| return s;
+    var it = componentes();
+    while (it.next()) |s| if (std.mem.eql(u8, s.name, name)) return s;
+    return null;
 }
 
 pub fn isContainer(name: []const u8) bool {
@@ -942,6 +886,7 @@ pub fn isContainer(name: []const u8) bool {
 /// O filho `name` dentro do bloco `parent` (`style` em `styles`).
 pub fn childSpec(parent: []const u8, name: []const u8) ?*const NodeSpec {
     for (&child_specs) |*s| if (std.mem.eql(u8, s.parent, parent) and std.mem.eql(u8, s.name, name)) return s;
+    for (registradas()) |e| for (e.filhos) |*s| if (std.mem.eql(u8, s.parent, parent) and std.mem.eql(u8, s.name, name)) return s;
     return null;
 }
 
@@ -962,6 +907,7 @@ pub fn patternToken(key: []const u8) ?[]const u8 {
 pub fn knowsKey(key: []const u8) bool {
     const lists = [_][]const NodeSpec{ &top, &child_specs, &containers, &components };
     for (lists) |list| for (list) |*s| if (findProp(s, key) != null) return true;
+    for (registradas()) |e| for ([_][]const NodeSpec{ e.componentes, e.filhos }) |list| for (list) |*s| if (findProp(s, key) != null) return true;
     return false;
 }
 
@@ -1102,9 +1048,11 @@ pub const Checker = struct {
 
     pub fn layoutNode(ck: *Checker, n: *const kdl.Node) error{OutOfMemory}!void {
         const spec = layoutSpec(n.name) orelse {
-            var names: [containers.len + components.len][]const u8 = undefined;
-            for (containers ++ components, 0..) |s, i| names[i] = s.name;
-            if (suggest(n.name, &names)) |s|
+            var names: std.ArrayList([]const u8) = .empty;
+            for (containers) |s| try names.append(ck.a, s.name);
+            var it = componentes();
+            while (it.next()) |s| try names.append(ck.a, s.name);
+            if (suggest(n.name, names.items)) |s|
                 return ck.issue(n.line, n.col, "unknown component '{s}' (did you mean '{s}'?)", .{ n.name, s });
             return ck.issue(n.line, n.col, "unknown component '{s}'", .{n.name});
         };
@@ -1183,9 +1131,12 @@ pub const Checker = struct {
                 return ck.issue(p.line, p.col, "'{s}' expects #true or #false", .{p.key});
             },
             .@"enum" => {
-                const s = v.asString() orelse return ck.issue(p.line, p.col, "'{s}' expects one of: {f}", .{ p.key, List{ .items = ps.values } });
-                for (ps.values) |ok| if (std.mem.eql(u8, ok, s)) return;
-                return ck.issue(p.line, p.col, "'{s}' isn't a value of '{s}' (expected: {f})", .{ s, p.key, List{ .items = ps.values } });
+                const values = valuesOf(ps);
+                const s = v.asString() orelse return ck.issue(p.line, p.col, "'{s}' expects one of: {f}", .{ p.key, List{ .items = values } });
+                // Valores registrados que nenhum app registrou: vale qualquer nome.
+                if (ps.registered and values.len == 0) return;
+                for (values) |ok| if (std.mem.eql(u8, ok, s)) return;
+                return ck.issue(p.line, p.col, "'{s}' isn't a value of '{s}' (expected: {f})", .{ s, p.key, List{ .items = values } });
             },
             .words => {
                 const s = v.asString() orelse return ck.issue(p.line, p.col, "'{s}' expects a list of words", .{p.key});
@@ -1226,7 +1177,7 @@ const List = struct {
 
 // --- JSON ------------------------------------------------------------------------------
 
-/// O esquema em JSON (docs/assets/site/theme-schema.json, `larpercord --theme-schema`).
+/// O esquema em JSON (docs/assets/site/theme-schema.json, o `--theme-schema` do app).
 /// Sempre igual para as mesmas tabelas: o teste compara com o arquivo guardado.
 pub fn writeJson(gpa: std.mem.Allocator, out: *std.ArrayList(u8)) !void {
     var w: J = .{ .gpa = gpa, .out = out };
@@ -1241,7 +1192,7 @@ pub fn writeJson(gpa: std.mem.Allocator, out: *std.ArrayList(u8)) !void {
         try out.appendSlice(gpa, if (i + 1 < token_names.len) "},\n" else "}\n");
     }
     try out.appendSlice(gpa, "  ],\n  \"previews\": ");
-    try w.strList(fieldNames(Preview));
+    try w.strList(previews());
     try out.appendSlice(gpa, ",\n  \"patterns\": [\n");
     for (patterns, 0..) |p, i| {
         try out.appendSlice(gpa, "    {\"prefix\": ");
@@ -1258,15 +1209,28 @@ pub fn writeJson(gpa: std.mem.Allocator, out: *std.ArrayList(u8)) !void {
         try out.appendSlice(gpa, if (i + 1 < sets.len) "    ],\n" else "    ]\n");
     }
     try out.appendSlice(gpa, "  },\n");
-    const groups = [_]struct { []const u8, []const NodeSpec }{
-        .{ "top", &top },
-        .{ "children", &child_specs },
-        .{ "containers", &containers },
-        .{ "components", &components },
+    // Os filhos e os componentes dos apps registrados vêm depois dos do kit.
+    var children: std.ArrayList(*const NodeSpec) = .empty;
+    defer children.deinit(gpa);
+    for (&child_specs) |*spec| try children.append(gpa, spec);
+    for (registradas()) |e| for (e.filhos) |*spec| try children.append(gpa, spec);
+    var comps: std.ArrayList(*const NodeSpec) = .empty;
+    defer comps.deinit(gpa);
+    var it = componentes();
+    while (it.next()) |spec| try comps.append(gpa, spec);
+    var tops: [top.len]*const NodeSpec = undefined;
+    for (&top, &tops) |*spec, *o| o.* = spec;
+    var conts: [containers.len]*const NodeSpec = undefined;
+    for (&containers, &conts) |*spec, *o| o.* = spec;
+    const groups = [_]struct { []const u8, []const *const NodeSpec }{
+        .{ "top", &tops },
+        .{ "children", children.items },
+        .{ "containers", &conts },
+        .{ "components", comps.items },
     };
     for (groups, 0..) |g, gi| {
         try out.print(gpa, "  \"{s}\": [\n", .{g[0]});
-        for (g[1], 0..) |*spec, i| {
+        for (g[1], 0..) |spec, i| {
             try w.node(spec);
             try out.appendSlice(gpa, if (i + 1 < g[1].len) ",\n" else "\n");
         }
@@ -1305,9 +1269,9 @@ const J = struct {
         try w.out.appendSlice(gpa, "{\"key\": ");
         try w.str(p.key);
         try w.out.print(gpa, ", \"type\": \"{t}\"", .{p.kind});
-        if (p.values.len > 0) {
+        if (valuesOf(p).len > 0) {
             try w.out.appendSlice(gpa, ", \"values\": ");
-            try w.strList(p.values);
+            try w.strList(valuesOf(p));
         }
         if (p.min) |x| try w.out.print(gpa, ", \"min\": {d}", .{x});
         if (p.max) |x| try w.out.print(gpa, ", \"max\": {d}", .{x});
@@ -1377,6 +1341,8 @@ const J = struct {
 // --- Testes ------------------------------------------------------------------------------
 
 const testing = std.testing;
+/// Os componentes e as partes do larperCord, registrados como um app faria.
+const cord = @import("exemplo_cord.zig");
 
 test "tokens saem do enum, com descrição" {
     try testing.expectEqual(token_count, token_names.len);
@@ -1387,7 +1353,7 @@ test "tokens saem do enum, com descrição" {
 }
 
 test "nomes únicos e propriedades sem repetir dentro de cada nó" {
-    const lists = [_][]const NodeSpec{ &top, &child_specs, &containers, &components };
+    const lists = [_][]const NodeSpec{ &top, &child_specs, &containers, &components ++ cord.componentes };
     for (lists) |list| for (list, 0..) |*s, i| {
         for (list[i + 1 ..]) |*o| try testing.expect(!std.mem.eql(u8, s.name, o.name) or !std.mem.eql(u8, s.parent, o.parent));
         // Uma propriedade do próprio nó pode detalhar a de um grupo (`radius` do `shape`:
@@ -1412,7 +1378,7 @@ test "nomes únicos e propriedades sem repetir dentro de cada nó" {
             };
         }
         for (s.props) |p| {
-            if (p.kind == .@"enum" or p.kind == .words) try testing.expect(p.values.len > 0);
+            if ((p.kind == .@"enum" and !p.registered) or p.kind == .words) try testing.expect(p.values.len > 0);
             if (p.min != null and p.max != null) try testing.expect(p.min.? < p.max.?);
             if (p.range) |r| try testing.expect(r[0] < r[1] and r[2] > 0);
         }
@@ -1436,6 +1402,7 @@ test "checagem: componente, propriedade e valor desconhecidos, com linha e colun
     defer arena.deinit();
     const a = arena.allocator();
     var out: std.ArrayList(Issue) = .empty;
+    cord.registrar();
     try checkSrc(
         \\theme "x" preview=nada
         \\fonts size=200
@@ -1474,6 +1441,7 @@ test "checagem estrita vira erro; tema certo não tem nada" {
     defer arena.deinit();
     const a = arena.allocator();
     var out: std.ArrayList(Issue) = .empty;
+    cord.registrar();
     try checkSrc("layout { messages tamanho=3 }", true, &out, a);
     try testing.expectEqual(@as(usize, 1), out.items.len);
     try testing.expectEqual(Severity.@"error", out.items[0].severity);
@@ -1488,7 +1456,9 @@ test "checagem estrita vira erro; tema certo não tem nada" {
 }
 
 test "os componentes com cor são os de fx.zig, e as cores deles são as que fx.zig guarda" {
-    for (components) |s| {
+    cord.registrar();
+    var it = componentes();
+    while (it.next()) |s| {
         if (s.paints != fx.painted.has(s.name)) {
             std.debug.print("{s}: paints={} no esquema, {} em fx.zig\n", .{ s.name, s.paints, fx.painted.has(s.name) });
             return error.Diferente;
@@ -1514,8 +1484,6 @@ test "parts: as partes, os estados e as propriedades de parts.zig" {
     try testing.expect(topSpec("parts") != null);
     const part = childSpec("parts", "part").?;
     try testing.expectEqual(parts.props.len, part.props.len);
-    for (parts.partes) |p| try testing.expect(std.mem.indexOf(u8, part.args.?.desc, p.name) != null);
-    for (parts.estados) |st| try testing.expect(std.mem.indexOf(u8, part.args.?.desc, st.name) != null);
     try testing.expectEqual(@as(?f64, 64), findProp(part, "radius").?.max);
     try testing.expectEqual(Kind.@"enum", findProp(part, "weight").?.kind);
 
@@ -1523,6 +1491,7 @@ test "parts: as partes, os estados e as propriedades de parts.zig" {
     defer arena.deinit();
     const a = arena.allocator();
     var out: std.ArrayList(Issue) = .empty;
+    cord.registrar();
     try checkSrc(
         \\parts mode=dark {
         \\    part "message:hover" bg="@hover" radius=6 bar=accent
@@ -1547,11 +1516,15 @@ test "parts: as partes, os estados e as propriedades de parts.zig" {
 test "o JSON abre e tem os componentes" {
     var out: std.ArrayList(u8) = .empty;
     defer out.deinit(testing.allocator);
+    cord.registrar();
     try writeJson(testing.allocator, &out);
     var parsed = try std.json.parseFromSlice(std.json.Value, testing.allocator, out.items, .{});
     defer parsed.deinit();
     const comps = parsed.value.object.get("components").?.array.items;
-    try testing.expectEqual(components.len, comps.len);
-    try testing.expectEqualStrings("guild-bar", comps[0].object.get("name").?.string);
+    // Os do kit primeiro, depois os do app registrado.
+    try testing.expectEqual(components.len + cord.componentes.len, comps.len);
+    try testing.expectEqualStrings("label", comps[0].object.get("name").?.string);
+    try testing.expectEqualStrings("guild-bar", comps[components.len].object.get("name").?.string);
+    try testing.expectEqual(cord.previews.len, parsed.value.object.get("previews").?.array.items.len);
     try testing.expectEqual(@as(usize, token_count), parsed.value.object.get("tokens").?.array.items.len);
 }

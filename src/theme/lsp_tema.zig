@@ -1,4 +1,4 @@
-//! Servidor de linguagem dos .kdl de tema (`larpercord --theme-lsp`): os erros e avisos do
+//! Servidor de linguagem dos .kdl de tema (o `--theme-lsp` do app): os erros e avisos do
 //! carregador e do esquema enquanto a pessoa digita, completar (nós, propriedades,
 //! valores, tokens depois de `@`, opções e variáveis depois de `$`) e a descrição de cada
 //! coisa ao passar o mouse. Esta é a parte pura: theme_cli.zig lê a entrada padrão,
@@ -10,6 +10,7 @@ const schema = @import("schema.zig");
 const bases = @import("bases.zig");
 const lsp = @import("../core/lsp.zig");
 const jsonx = @import("../net/jsonx.zig");
+const app = @import("../core/app.zig");
 
 const Value = std.json.Value;
 
@@ -46,9 +47,11 @@ pub const Server = struct {
         const id = jsonx.get(root, "id");
         const params = jsonx.get(root, "params") orelse Value{ .null = {} };
         if (std.mem.eql(u8, method, "initialize")) {
-            return s.reply(out, id, "{\"capabilities\":{\"positionEncoding\":\"utf-16\",\"textDocumentSync\":{\"openClose\":true,\"change\":1}," ++
-                "\"completionProvider\":{\"triggerCharacters\":[\"=\",\"@\",\"$\",\"\\\"\"]},\"hoverProvider\":true}," ++
-                "\"serverInfo\":{\"name\":\"larpercord-theme\"}}");
+            var name: std.ArrayList(u8) = .empty;
+            try jsonx.writeString(&name, a, try std.fmt.allocPrint(a, "{s}-theme", .{app.pasta}));
+            return s.reply(out, id, try std.fmt.allocPrint(a, "{{\"capabilities\":{{\"positionEncoding\":\"utf-16\",\"textDocumentSync\":{{\"openClose\":true,\"change\":1}}," ++
+                "\"completionProvider\":{{\"triggerCharacters\":[\"=\",\"@\",\"$\",\"\\\"\"]}},\"hoverProvider\":true}}," ++
+                "\"serverInfo\":{{\"name\":{s}}}}}", .{name.items}));
         }
         if (std.mem.eql(u8, method, "shutdown")) {
             s.shutdown = true;
@@ -312,9 +315,11 @@ fn writeDiagnostic(b: *std.ArrayList(u8), gpa: std.mem.Allocator, text: []const 
         start = if (at) |x| x.start else 0;
         end = if (at) |x| x.end else @min(1, line.len);
     }
-    try b.print(gpa, "{{\"range\":{{\"start\":{{\"line\":{d},\"character\":{d}}},\"end\":{{\"line\":{d},\"character\":{d}}}}},\"severity\":{d},\"source\":\"larpercord\",\"message\":", .{
+    try b.print(gpa, "{{\"range\":{{\"start\":{{\"line\":{d},\"character\":{d}}},\"end\":{{\"line\":{d},\"character\":{d}}}}},\"severity\":{d},\"source\":", .{
         line0, utf16Col(line, start), line0, utf16Col(line, end), @as(u8, if (it.severity == .@"error") 1 else 2),
     });
+    try jsonx.writeString(b, gpa, app.pasta);
+    try b.appendSlice(gpa, ",\"message\":");
     if (it.file.len > 0) {
         const msg = try std.fmt.allocPrint(gpa, "{s}:{d}:{d}: {s}", .{ it.file, it.line, it.col, it.message });
         defer gpa.free(msg);
@@ -645,7 +650,8 @@ fn nodeNames(it: *Items, c: *const Context) !void {
     switch (children) {
         .layout, .layout_root => {
             for (&schema.containers) |*s| try it.add(s.name, .class, "container", s.desc);
-            for (&schema.components) |*s| try it.add(s.name, .class, "component", s.desc);
+            var comps = schema.componentes();
+            while (comps.next()) |s| try it.add(s.name, .class, "component", s.desc);
         },
         .named => |names| for (names) |n| {
             const s = schema.childSpec(parent, n);
@@ -761,7 +767,11 @@ fn frames(gpa: std.mem.Allocator, raw: []const u8) !std.ArrayList([]const u8) {
     return list;
 }
 
+/// Os componentes, as partes e os temas do larperCord, registrados como um app faria.
+const cord = @import("exemplo_cord.zig");
+
 test "sessão: initialize, diagnósticos com linha e coluna, completar, hover, shutdown e exit" {
+    cord.registrar();
     const gpa = testing.allocator;
     var s: Server = .{ .gpa = gpa };
     defer s.deinit();
@@ -835,6 +845,7 @@ test "sessão: initialize, diagnósticos com linha e coluna, completar, hover, s
 }
 
 test "contexto: nó, propriedade, valor, string e @token" {
+    cord.registrar();
     const t =
         \\colors {
         \\    accent "mix(@sur
@@ -879,8 +890,9 @@ test "a base de extends vem dos temas embutidos: completar acha as opções e os
     defer s.deinit();
     var arena = std.heap.ArenaAllocator.init(gpa);
     defer arena.deinit();
-    // O terminal tem a opção "crt": um filho dele a vê em `when=`.
-    const doc = "extends \"terminal\"\nlayout { column { crt when=";
+    // O classico tem a opção "crt": um filho dele a vê em `when=`.
+    cord.registrar();
+    const doc = "extends \"classico\"\nlayout { column { crt when=";
     var out: std.ArrayList(u8) = .empty;
     try completion(&s, arena.allocator(), "file:///tmp/filho.kdl", doc, doc.len, &out);
     try testing.expect(std.mem.indexOf(u8, out.items, "\"label\":\"crt\"") != null);
@@ -971,6 +983,7 @@ fn count(hay: []const u8, needle: []const u8) usize {
 }
 
 test "entrada e saída padrão de mentira: theme-api 2 dá erro, 1 dá aviso, completar, hover e exit" {
+    cord.registrar();
     const gpa = testing.allocator;
     const uri = "file:///tmp/estrito.kdl";
     // A linha 5 tem acento e um emoji antes do nome errado: a coluna sai em UTF-16.
@@ -1087,6 +1100,7 @@ test "entrada que fecha, exit sem shutdown, cabeçalho quebrado e saída fechada
 }
 
 test "uma base de extends na pasta do arquivo: os avisos dela aparecem com o nome do arquivo" {
+    cord.registrar();
     const gpa = testing.allocator;
     const Disk = struct {
         fn read(a: std.mem.Allocator, path: []const u8) ?[]const u8 {

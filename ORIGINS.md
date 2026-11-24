@@ -101,6 +101,13 @@ in both repositories.
 | `third_party/lua/` | Lua 5.4 |
 | `third_party/stb/` | stb_image and friends |
 
+### Test fixtures
+
+`src/theme/exemplo_cord.zig` registers larperCord's components, parts and thumbnails the way
+an app does, so the theme tests run against a real app. Its tables were moved out of
+`src/theme/schema.zig` and `src/theme/parts.zig` (`ac44662`). `src/theme/exemplo_cord/classico.kdl`
+and `zen.kdl` are `themes/classico.kdl` and `themes/zen.kdl` from `b5b3fc2`.
+
 ## WooferSoundPad
 
 [WooferSoundPad](https://github.com/RshaCuDeVidro/WooferSoundPad), branch `main`.
@@ -112,3 +119,7 @@ in both repositories.
 | Path here | Path there | Notes |
 | --- | --- | --- |
 | `src/woofer/ui.zig` | `src/ui.zig` | Component API and behavior; the raylib drawing stays behind |
+| `src/woofer/LICENSE` | `LICENSE` | MIT, Copyright (c) 2026 RshaCuDeVidro |
+
+`src/woofer/ui.zig` is MIT-licensed (see `src/woofer/LICENSE`). It is reference material and is
+not part of the build while it depends on raylib.

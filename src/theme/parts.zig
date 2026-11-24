@@ -7,12 +7,13 @@
 //!         part "channel.item:selected:hover" bg="mix(@selected, @text, 0.05)"
 //!     }
 //!
-//! As tabelas `partes`, `estados` e `props` abaixo dizem o que existe (o nome, os estados
-//! que valem, as propriedades com o tipo e uma linha em inglês): o carregador, o README e
-//! a checagem dos temas da comunidade (tools/gen_site.py) leem daqui.
+//! Quais partes existem é de cada app (e de cada componente do kit): cada um monta um
+//! conjunto com `Partes` (as partes, os estados que valem em cada uma e as propriedades,
+//! com uma linha em inglês) e registra com `registrar` (ou `schema.registrar`). A tabela
+//! `props` abaixo é a mesma para todos.
 //!
 //! Tudo é resolvido ao carregar o tema: para cada parte e cada combinação de estados, a
-//! cascata vira um `Look` numa tabela, e quem desenha só indexa (`Table.get`), sem
+//! cascata vira um `Look` numa tabela, e quem desenha só indexa (`Partes(…).get`), sem
 //! comparar nome nem alocar. As cores são expressões guardadas (`color.Expr`), avaliadas
 //! no quadro com os tokens do momento, como as de `fx.zig`: seguem a cor de destaque
 //! escolhida, a do servidor e o `c-…` do pedaço do layout. Tema sem `parts` não tem
@@ -26,33 +27,9 @@ pub const Weight = fx.Weight;
 
 // --- O que existe -----------------------------------------------------------------------
 
-/// Os estados, na ordem da precedência: numa combinação, o de baixo vence o de cima.
-pub const State = enum(u3) { self, muted, offline, hover, unread, mention, selected, speaking };
-
-/// Os mesmos estados como bits, para quem desenha montar a combinação.
-pub const States = packed struct(u8) {
-    self: bool = false,
-    muted: bool = false,
-    offline: bool = false,
-    hover: bool = false,
-    unread: bool = false,
-    mention: bool = false,
-    selected: bool = false,
-    speaking: bool = false,
-};
-
+/// Um estado de um conjunto. Na lista do conjunto, a ordem é a da precedência: numa
+/// combinação, o de baixo vence o de cima. No máximo 8 por conjunto.
 pub const StateSpec = struct { name: []const u8, desc: []const u8 };
-
-pub const estados = [_]StateSpec{
-    .{ .name = "self", .desc = "your own message, or your own row in a list" },
-    .{ .name = "muted", .desc = "a channel you muted (or can't open)" },
-    .{ .name = "offline", .desc = "a member who is offline" },
-    .{ .name = "hover", .desc = "the mouse is over it" },
-    .{ .name = "unread", .desc = "a channel with unread messages (not when muted)" },
-    .{ .name = "mention", .desc = "a message that pings you, or a channel with unread pings" },
-    .{ .name = "selected", .desc = "the open channel" },
-    .{ .name = "speaking", .desc = "someone talking in the voice call you are in" },
-};
 
 pub const Kind = enum { color, number, weight };
 
@@ -73,58 +50,99 @@ pub const props = [_]PropSpec{
     .{ .name = "weight", .kind = .weight, .desc = "font weight: regular, medium, semibold, bold or italic" },
 };
 
-pub const Part = enum(u4) {
-    message,
-    message_author,
-    message_time,
-    message_body,
-    message_reply,
-    channel_item,
-    channel_category,
-    channel_unread,
-    channel_badge,
-    channel_voice_member,
-    member_row,
-    member_name,
-    member_role_header,
-    composer_box,
-    composer_placeholder,
-};
-
-/// `states` e `props`: nomes separados por espaço (uma entrada por linha: o
-/// tools/gen_site.py lê esta lista).
+/// `states` e `props`: nomes separados por espaço (uma entrada por linha, para quem gera
+/// a documentação ler a lista).
 pub const PartSpec = struct { name: []const u8, states: []const u8, props: []const u8, desc: []const u8 };
 
-pub const partes = [_]PartSpec{
-    .{ .name = "message", .states = "self hover mention", .props = "bg border border-width radius bar bar-width opacity", .desc = "a whole message row, behind the avatar, the name and the text" },
-    .{ .name = "message.author", .states = "self hover mention", .props = "color weight", .desc = "the author's name (the nick column in irc)" },
-    .{ .name = "message.time", .states = "self hover mention", .props = "color", .desc = "the time of the message" },
-    .{ .name = "message.body", .states = "self hover mention", .props = "color", .desc = "the text of the message" },
-    .{ .name = "message.reply", .states = "self hover mention", .props = "color", .desc = "the line that quotes the message being replied to" },
-    .{ .name = "channel.item", .states = "muted hover unread mention selected", .props = "bg color border border-width radius bar bar-width opacity weight", .desc = "a channel row of a server; color and weight are the name's" },
-    .{ .name = "channel.category", .states = "hover", .props = "bg color border border-width radius weight", .desc = "a category header in the channel list" },
-    .{ .name = "channel.unread", .states = "", .props = "color", .desc = "the unread marker of a channel row" },
-    .{ .name = "channel.badge", .states = "", .props = "bg color", .desc = "the count of unread pings on a channel row" },
-    .{ .name = "channel.voice-member", .states = "self hover speaking", .props = "bg color border border-width radius weight", .desc = "someone in a voice channel, listed under it" },
-    .{ .name = "member.row", .states = "self offline hover speaking", .props = "bg border border-width radius bar bar-width opacity", .desc = "a row of the member list" },
-    .{ .name = "member.name", .states = "self offline hover speaking", .props = "color weight", .desc = "the name in a member row" },
-    .{ .name = "member.role-header", .states = "", .props = "color weight", .desc = "a group heading of the member list (ONLINE — 3)" },
-    .{ .name = "composer.box", .states = "", .props = "bg border border-width radius", .desc = "the message box" },
-    .{ .name = "composer.placeholder", .states = "", .props = "color weight", .desc = "the hint in the empty message box" },
+/// As partes de um app, com os estados delas: o que `registrar` recebe. Montado em tempo
+/// de compilação por `Partes`, que confere a tabela.
+pub const Conjunto = struct {
+    estados: []const StateSpec,
+    partes: []const PartSpec,
+    /// Os estados e as propriedades de cada parte, como bits (lidos das strings da tabela).
+    valid_states: []const u8,
+    valid_props: []const u16,
+
+    fn stateIndex(c: *const Conjunto, name: []const u8) ?u3 {
+        for (c.estados, 0..) |s, i| if (std.mem.eql(u8, s.name, name)) return @intCast(i);
+        return null;
+    }
+
+    fn propIndex(name: []const u8) ?Prop {
+        inline for (props, 0..) |p, i| if (std.mem.eql(u8, p.name, name)) return @enumFromInt(i);
+        return null;
+    }
+
+    fn partIndex(c: *const Conjunto, name: []const u8) ?u16 {
+        for (c.partes, 0..) |p, i| if (std.mem.eql(u8, p.name, name)) return @intCast(i);
+        return null;
+    }
+
+    fn hasState(c: *const Conjunto, p: usize, s: u3) bool {
+        return c.valid_states[p] & (@as(u8, 1) << s) != 0;
+    }
+
+    fn hasProp(c: *const Conjunto, p: usize, pr: Prop) bool {
+        return c.valid_props[p] & (@as(u16, 1) << @intFromEnum(pr)) != 0;
+    }
 };
 
-pub const n_parts = partes.len;
-
-comptime {
-    std.debug.assert(@typeInfo(Part).@"enum".field_names.len == partes.len);
-    std.debug.assert(@typeInfo(Prop).@"enum".field_names.len == props.len);
-    std.debug.assert(@typeInfo(State).@"enum".field_names.len == estados.len);
-    for (partes, 0..) |p, i| std.debug.assert(sameName(p.name, @tagName(@as(Part, @enumFromInt(i)))));
-    for (props, 0..) |p, i| std.debug.assert(sameName(p.name, @tagName(@as(Prop, @enumFromInt(i)))));
-    for (estados, 0..) |s, i| {
-        std.debug.assert(std.mem.eql(u8, s.name, @tagName(@as(State, @enumFromInt(i)))));
-        std.debug.assert(std.mem.eql(u8, s.name, @typeInfo(States).@"struct".field_names[i]));
+/// O conjunto de um app com os tipos dele: `Part` é um enum com uma entrada por parte, na
+/// ordem de `partes` (`channel.voice-member` é `channel_voice_member`), e `States` um
+/// `packed struct(u8)` com um bool por estado, na ordem de `estados`. O app registra
+/// `&conjunto` e desenha com `get`.
+pub fn Partes(comptime Part: type, comptime States: type, comptime estados: []const StateSpec, comptime partes: []const PartSpec) type {
+    comptime {
+        std.debug.assert(estados.len <= 8);
+        std.debug.assert(@typeInfo(Part).@"enum".field_names.len == partes.len);
+        std.debug.assert(@bitSizeOf(States) == 8);
+        for (partes, 0..) |p, i| std.debug.assert(sameName(p.name, @tagName(@as(Part, @enumFromInt(i)))));
+        for (estados, 0..) |s, i| std.debug.assert(std.mem.eql(u8, s.name, @typeInfo(States).@"struct".field_names[i]));
     }
+    return struct {
+        const valid_states: [partes.len]u8 = blk: {
+            @setEvalBranchQuota(20_000);
+            var out: [partes.len]u8 = @splat(0);
+            for (partes, 0..) |p, i| {
+                var it = std.mem.tokenizeScalar(u8, p.states, ' ');
+                next: while (it.next()) |s| {
+                    for (estados, 0..) |e, k| if (std.mem.eql(u8, e.name, s)) {
+                        out[i] |= @as(u8, 1) << k;
+                        continue :next;
+                    };
+                    @compileError("estado desconhecido na tabela: " ++ s);
+                }
+            }
+            break :blk out;
+        };
+
+        const valid_props: [partes.len]u16 = blk: {
+            @setEvalBranchQuota(20_000);
+            var out: [partes.len]u16 = @splat(0);
+            for (partes, 0..) |p, i| {
+                var it = std.mem.tokenizeScalar(u8, p.props, ' ');
+                while (it.next()) |s| out[i] |= @as(u16, 1) << @intFromEnum(Conjunto.propIndex(s) orelse @compileError("propriedade desconhecida na tabela: " ++ s));
+            }
+            break :blk out;
+        };
+
+        pub const conjunto: Conjunto = .{ .estados = estados, .partes = partes, .valid_states = &valid_states, .valid_props = &valid_props };
+
+        /// Como a parte fica nessa combinação de estados, no tema `t` (`theme.parts`).
+        pub fn get(t: ?*const Table, p: Part, s: States) *const Look {
+            const tb = t orelse return &none;
+            const index = tb.indexOf(&conjunto) orelse return &none;
+            return &tb.looks[index[@intFromEnum(p)][@as(u8, @bitCast(s))]];
+        }
+
+        pub fn hasState(p: Part, s: std.meta.FieldEnum(States)) bool {
+            return conjunto.hasState(@intFromEnum(p), @intCast(@intFromEnum(s)));
+        }
+
+        pub fn hasProp(p: Part, pr: Prop) bool {
+            return conjunto.hasProp(@intFromEnum(p), pr);
+        }
+    };
 }
 
 /// `channel.voice-member` é `channel_voice_member`.
@@ -137,48 +155,28 @@ fn sameName(name: []const u8, tag: []const u8) bool {
     return true;
 }
 
-fn stateIndex(name: []const u8) ?u3 {
-    inline for (estados, 0..) |s, i| if (std.mem.eql(u8, s.name, name)) return i;
+// --- Registro ---------------------------------------------------------------------------
+
+var registrados: [8]*const Conjunto = undefined;
+var n_registrados: usize = 0;
+
+/// Junta um conjunto aos que os temas entendem (uma vez basta; repetir não faz nada). Só
+/// na thread da interface, antes de carregar temas: os temas já carregados não veem o novo.
+pub fn registrar(c: *const Conjunto) void {
+    for (conjuntos()) |old| if (old == c) return;
+    std.debug.assert(n_registrados < registrados.len);
+    registrados[n_registrados] = c;
+    n_registrados += 1;
+}
+
+pub fn conjuntos() []const *const Conjunto {
+    return registrados[0..n_registrados];
+}
+
+/// A parte com esse nome, em algum conjunto registrado.
+fn find(name: []const u8) ?struct { set: u8, part: u16 } {
+    for (conjuntos(), 0..) |c, i| if (c.partIndex(name)) |p| return .{ .set = @intCast(i), .part = p };
     return null;
-}
-
-fn propIndex(name: []const u8) ?Prop {
-    inline for (props, 0..) |p, i| if (std.mem.eql(u8, p.name, name)) return @enumFromInt(i);
-    return null;
-}
-
-fn partIndex(name: []const u8) ?Part {
-    inline for (partes, 0..) |p, i| if (std.mem.eql(u8, p.name, name)) return @enumFromInt(i);
-    return null;
-}
-
-/// Os estados e as propriedades de cada parte, como bits (lidos das strings da tabela).
-const valid_states: [n_parts]u8 = blk: {
-    @setEvalBranchQuota(20_000);
-    var out: [n_parts]u8 = @splat(0);
-    for (partes, 0..) |p, i| {
-        var it = std.mem.tokenizeScalar(u8, p.states, ' ');
-        while (it.next()) |s| out[i] |= @as(u8, 1) << (stateIndex(s) orelse @compileError("estado desconhecido na tabela: " ++ s));
-    }
-    break :blk out;
-};
-
-const valid_props: [n_parts]u16 = blk: {
-    @setEvalBranchQuota(20_000);
-    var out: [n_parts]u16 = @splat(0);
-    for (partes, 0..) |p, i| {
-        var it = std.mem.tokenizeScalar(u8, p.props, ' ');
-        while (it.next()) |s| out[i] |= @as(u16, 1) << @intFromEnum(propIndex(s) orelse @compileError("propriedade desconhecida na tabela: " ++ s));
-    }
-    break :blk out;
-};
-
-pub fn hasState(p: Part, s: State) bool {
-    return valid_states[@intFromEnum(p)] & (@as(u8, 1) << @intFromEnum(s)) != 0;
-}
-
-pub fn hasProp(p: Part, pr: Prop) bool {
-    return valid_props[@intFromEnum(p)] & (@as(u16, 1) << @intFromEnum(pr)) != 0;
 }
 
 // --- O resultado ------------------------------------------------------------------------
@@ -202,14 +200,18 @@ pub const Look = struct {
 pub const none: Look = .{};
 
 pub const Table = struct {
-    /// Para cada parte e cada combinação dos 8 estados, o índice em `looks`. Os bits que
-    /// não valem para a parte dão no mesmo que sem eles.
-    index: [n_parts][256]u16,
+    /// Um índice por conjunto registrado quando o tema carregou: para cada parte e cada
+    /// combinação dos 8 estados, o índice em `looks`. Os bits que não valem para a parte
+    /// dão no mesmo que sem eles.
+    sets: []const SetIndex,
     /// `looks[0]` é `none`.
     looks: []const Look,
 
-    pub fn get(t: *const Table, p: Part, s: States) *const Look {
-        return &t.looks[t.index[@intFromEnum(p)][@as(u8, @bitCast(s))]];
+    pub const SetIndex = struct { conjunto: *const Conjunto, index: []const [256]u16 };
+
+    fn indexOf(t: *const Table, c: *const Conjunto) ?[]const [256]u16 {
+        for (t.sets) |s| if (s.conjunto == c) return s.index;
+        return null;
     }
 };
 
@@ -237,7 +239,8 @@ const Set = struct {
 };
 
 const Rule = struct {
-    part: Part,
+    set_index: u8,
+    part: u16,
     mask: u8,
     set: Set,
     /// Ordem no arquivo (o de baixo vence um empate).
@@ -286,17 +289,18 @@ pub const Builder = struct {
             if (!std.mem.eql(u8, n.name, "part")) return fail(cx, n, "dentro de `parts` só vai `part \"nome:estado\"`");
             const sel = (n.arg(0) orelse return fail(cx, n, "part sem nome (part \"message:hover\" …)")).asString() orelse return fail(cx, n, "o nome da parte deve ser uma string");
             var it = std.mem.splitScalar(u8, sel, ':');
-            const part = partIndex(it.first()) orelse return fail(cx, n, "parte desconhecida (a lista está em themes/README.md, \"Parts and states\")");
+            const found = find(it.first()) orelse return fail(cx, n, "parte desconhecida (a lista está na documentação dos temas do app, \"Parts and states\")");
+            const conj = conjuntos()[found.set];
             var mask: u8 = 0;
             while (it.next()) |s| {
-                const i = stateIndex(s) orelse return fail(cx, n, "estado desconhecido: hover, selected, unread, mention, speaking, muted, offline ou self");
-                if (!hasState(part, @enumFromInt(i))) return fail(cx, n, "esse estado não existe nessa parte (a lista está em themes/README.md)");
+                const i = conj.stateIndex(s) orelse return fail(cx, n, "estado desconhecido (os estados de cada parte estão na documentação dos temas do app)");
+                if (!conj.hasState(found.part, i)) return fail(cx, n, "esse estado não existe nessa parte (a lista está na documentação dos temas do app)");
                 mask |= @as(u8, 1) << i;
             }
             var set: Set = .{};
             for (n.props) |p| {
-                const pr = propIndex(p.key) orelse return fail(cx, n, "propriedade desconhecida numa parte");
-                if (!hasProp(part, pr)) return fail(cx, n, "essa propriedade não existe nessa parte (a lista está em themes/README.md)");
+                const pr = Conjunto.propIndex(p.key) orelse return fail(cx, n, "propriedade desconhecida numa parte");
+                if (!conj.hasProp(found.part, pr)) return fail(cx, n, "essa propriedade não existe nessa parte (a lista está na documentação dos temas do app)");
                 const spec = props[@intFromEnum(pr)];
                 const msg = bad_value[@intFromEnum(pr)];
                 switch (spec.kind) {
@@ -328,7 +332,7 @@ pub const Builder = struct {
                     },
                 }
             }
-            try b.rules.append(cx.a, .{ .part = part, .mask = mask, .set = set, .order = @intCast(b.rules.items.len) });
+            try b.rules.append(cx.a, .{ .set_index = found.set, .part = found.part, .mask = mask, .set = set, .order = @intCast(b.rules.items.len) });
         }
     }
 
@@ -338,22 +342,28 @@ pub const Builder = struct {
         std.mem.sort(Rule, b.rules.items, {}, Rule.before);
         var looks: std.ArrayList(Look) = .empty;
         try looks.append(a, none);
-        const t = try a.create(Table);
-        for (0..n_parts) |pi| {
-            const valid = valid_states[pi];
-            for (0..256) |m| {
-                const mask: u8 = @intCast(m);
-                if (mask & ~valid != 0) continue;
-                var l: Look = .{};
-                for (b.rules.items) |r| {
-                    if (@intFromEnum(r.part) == pi and r.mask & ~mask == 0) r.set.onto(&l);
+        const regs = conjuntos();
+        const sets = try a.alloc(Table.SetIndex, regs.len);
+        for (regs, sets, 0..) |conj, *out, si| {
+            const index = try a.alloc([256]u16, conj.partes.len);
+            for (index, 0..) |*row, pi| {
+                const valid = conj.valid_states[pi];
+                for (0..256) |m| {
+                    const mask: u8 = @intCast(m);
+                    if (mask & ~valid != 0) continue;
+                    var l: Look = .{};
+                    for (b.rules.items) |r| {
+                        if (r.set_index == si and r.part == pi and r.mask & ~mask == 0) r.set.onto(&l);
+                    }
+                    row[m] = try intern(a, &looks, l);
                 }
-                t.index[pi][m] = try intern(a, &looks, l);
+                // As combinações com estados que a parte não tem: como sem eles.
+                for (0..256) |m| row[m] = row[m & valid];
             }
-            // As combinações com estados que a parte não tem: como sem eles.
-            for (0..256) |m| t.index[pi][m] = t.index[pi][m & valid];
+            out.* = .{ .conjunto = conj, .index = index };
         }
-        t.looks = try looks.toOwnedSlice(a);
+        const t = try a.create(Table);
+        t.* = .{ .sets = sets, .looks = try looks.toOwnedSlice(a) };
         return t;
     }
 
@@ -369,9 +379,12 @@ pub const Builder = struct {
 
 const testing = std.testing;
 const theme = @import("theme.zig");
-const builtin_themes = @import("builtin_themes");
+/// As partes do larperCord, registradas como um app faria.
+const cord = @import("exemplo_cord.zig");
+const P = cord.Partes;
 
 fn loadSrc(src: []const u8, d: ?*theme.Diagnostic) !theme.Theme {
+    cord.registrar();
     return theme.load(testing.allocator, src, null, d);
 }
 
@@ -399,27 +412,27 @@ test "lê as partes, com estados combinados e propriedades de cada tipo" {
     , null);
     defer t.deinit();
     const tb = t.parts.?;
-    const author = tb.get(.message_author, .{});
+    const author = P.get(tb, .message_author, .{});
     try testing.expect(author.any);
     try testing.expectEqual(Weight.bold, author.weight.?);
     try testing.expectEqual(@as(u32, 0xff0000), rgb(&t, author.color));
     // Sem o hover, a mensagem não muda; com ele, tudo o que a regra disse.
-    try testing.expect(!tb.get(.message, .{}).any);
-    const hov = tb.get(.message, .{ .hover = true });
+    try testing.expect(!P.get(tb, .message, .{}).any);
+    const hov = P.get(tb, .message, .{ .hover = true });
     try testing.expectEqual(@as(?f32, 6), hov.radius);
     try testing.expectEqual(@as(f32, 4), hov.bar_width);
     try testing.expectEqual(@as(f32, 0.5), hov.opacity);
     try testing.expectEqual(@as(f32, 1), hov.border_width);
     try testing.expect(hov.border == null);
     // A regra de dois estados só vale com os dois.
-    try testing.expect(!tb.get(.channel_item, .{ .selected = true }).any);
-    const both = tb.get(.channel_item, .{ .selected = true, .hover = true, .unread = true });
+    try testing.expect(!P.get(tb, .channel_item, .{ .selected = true }).any);
+    const both = P.get(tb, .channel_item, .{ .selected = true, .hover = true, .unread = true });
     try testing.expectEqual(@as(f32, 2), both.border_width);
     try testing.expectEqual(@as(u32, 0xff8080), rgb(&t, both.bg));
     // Números fora da faixa ficam na borda dela.
-    try testing.expectEqual(@as(?f32, 64), tb.get(.composer_box, .{}).radius);
+    try testing.expectEqual(@as(?f32, 64), P.get(tb, .composer_box, .{}).radius);
     // Estado que a parte não tem não muda nada (o composer não tem hover).
-    try testing.expectEqual(tb.get(.composer_box, .{}), tb.get(.composer_box, .{ .hover = true, .speaking = true }));
+    try testing.expectEqual(P.get(tb, .composer_box, .{}), P.get(tb, .composer_box, .{ .hover = true, .speaking = true }));
 }
 
 test "cascata: estado mais forte vence, propriedade por propriedade" {
@@ -437,36 +450,36 @@ test "cascata: estado mais forte vence, propriedade por propriedade" {
     , null);
     defer t.deinit();
     const tb = t.parts.?;
-    const base = tb.get(.channel_item, .{});
+    const base = P.get(tb, .channel_item, .{});
     try testing.expectEqual(@as(u32, 1), rgb(&t, base.bg));
     try testing.expectEqual(@as(u32, 0x11), rgb(&t, base.color));
     try testing.expectEqual(Weight.medium, base.weight.?);
     // hover < unread < mention < selected, cada propriedade por si.
-    const h = tb.get(.channel_item, .{ .hover = true });
+    const h = P.get(tb, .channel_item, .{ .hover = true });
     try testing.expectEqual(@as(u32, 2), rgb(&t, h.bg));
     try testing.expectEqual(@as(u32, 0x11), rgb(&t, h.color));
     // Duas regras iguais: a de baixo no arquivo vence.
     try testing.expectEqual(@as(u32, 0x23), rgb(&t, h.border));
-    const hu = tb.get(.channel_item, .{ .hover = true, .unread = true });
+    const hu = P.get(tb, .channel_item, .{ .hover = true, .unread = true });
     try testing.expectEqual(@as(u32, 2), rgb(&t, hu.bg));
     try testing.expectEqual(@as(u32, 0x14), rgb(&t, hu.color));
     try testing.expectEqual(Weight.bold, hu.weight.?);
     try testing.expectEqual(@as(?f32, 2), hu.radius);
-    const hm = tb.get(.channel_item, .{ .hover = true, .unread = true, .mention = true });
+    const hm = P.get(tb, .channel_item, .{ .hover = true, .unread = true, .mention = true });
     try testing.expectEqual(@as(u32, 5), rgb(&t, hm.bg));
     try testing.expectEqual(@as(u32, 0x14), rgb(&t, hm.color));
-    const s = tb.get(.channel_item, .{ .selected = true, .mention = true, .unread = true });
+    const s = P.get(tb, .channel_item, .{ .selected = true, .mention = true, .unread = true });
     try testing.expectEqual(@as(u32, 3), rgb(&t, s.bg));
     try testing.expectEqual(@as(u32, 0x13), rgb(&t, s.color));
     try testing.expectEqual(Weight.bold, s.weight.?);
     try testing.expect(s.bar == null);
     // A combinada (selected + hover) vem depois da de um estado só com o mesmo mais forte.
-    const sh = tb.get(.channel_item, .{ .selected = true, .hover = true });
+    const sh = P.get(tb, .channel_item, .{ .selected = true, .hover = true });
     try testing.expectEqual(@as(u32, 0x33), rgb(&t, sh.bar));
     try testing.expectEqual(@as(u32, 3), rgb(&t, sh.bg));
     try testing.expectEqual(@as(u32, 0x23), rgb(&t, sh.border));
     // Partes sem regra ficam como sempre.
-    try testing.expect(!tb.get(.message, .{ .hover = true }).any);
+    try testing.expect(!P.get(tb, .message, .{ .hover = true }).any);
 }
 
 test "erros apontam a linha" {
@@ -502,7 +515,7 @@ test "as cores seguem os tokens do momento" {
         \\layout { messages }
     , null);
     defer t.deinit();
-    const l = t.parts.?.get(.message, .{ .mention = true });
+    const l = P.get(t.parts, .message, .{ .mention = true });
     try testing.expectEqual(@as(u32, 0x102030), rgb(&t, l.bar));
     try testing.expectApproxEqAbs(@as(f32, 0.5), l.bg.?.eval(t.tokenValues()).a, 0.001);
     // A cor escolhida nas configurações (ou a do servidor) troca o token: a parte acompanha.
@@ -511,9 +524,9 @@ test "as cores seguem os tokens do momento" {
     // A cópia do tema com outras cores (root.zig, `c-…`) aponta para a mesma tabela.
     var local = t;
     local.colors.set(.accent, color.Rgba.hex(0x000001));
-    try testing.expectEqual(@as(u32, 0x000001), rgb(&local, local.parts.?.get(.message, .{ .mention = true }).bar));
+    try testing.expectEqual(@as(u32, 0x000001), rgb(&local, P.get(local.parts, .message, .{ .mention = true }).bar));
     // Cor da paleta já vem resolvida.
-    try testing.expect(t.parts.?.get(.composer_box, .{}).bg.?.* == .lit);
+    try testing.expect(P.get(t.parts, .composer_box, .{}).bg.?.* == .lit);
 }
 
 test "modo e opção valem para o bloco" {
@@ -523,17 +536,19 @@ test "modo e opção valem para o bloco" {
         \\parts when=realce { part "message:mention" bar="#ff0000" }
         \\layout { messages }
     ;
+    cord.registrar();
     var dark = try theme.loadWith(testing.allocator, src, .{ .mode = .dark }, null);
     defer dark.deinit();
     try testing.expect(dark.parts == null);
     var light = try theme.loadWith(testing.allocator, src, .{ .mode = .light }, null);
     defer light.deinit();
-    try testing.expect(light.parts.?.get(.message, .{ .hover = true }).bg != null);
-    try testing.expect(light.parts.?.get(.message, .{ .mention = true }).bar == null);
+    try testing.expect(P.get(light.parts, .message, .{ .hover = true }).bg != null);
+    try testing.expect(P.get(light.parts, .message, .{ .mention = true }).bar == null);
 }
 
 test "sem parts, nada muda: os temas embutidos não têm tabela" {
-    for (builtin_themes.list) |b| for ([_]theme.Mode{ .dark, .light }) |mode| {
+    cord.registrar();
+    for (cord.temas) |b| for ([_]theme.Mode{ .dark, .light }) |mode| {
         var t = try theme.loadWith(testing.allocator, b.source, .{ .mode = mode }, null);
         defer t.deinit();
         try testing.expect(t.parts == null);
@@ -547,12 +562,12 @@ test "sem parts, nada muda: os temas embutidos não têm tabela" {
 
 test "a tabela declarativa é coerente" {
     // Toda parte tem ao menos uma propriedade, e os estados de cada uma existem.
-    for (partes, 0..) |p, i| {
-        try testing.expect(valid_props[i] != 0);
+    for (cord.partes, 0..) |p, i| {
+        try testing.expect(P.conjunto.valid_props[i] != 0);
         try testing.expect(p.desc.len > 0);
     }
-    try testing.expect(hasState(.channel_item, .selected));
-    try testing.expect(!hasState(.member_row, .unread));
-    try testing.expect(hasProp(.message, .bar));
-    try testing.expect(!hasProp(.message_time, .weight));
+    try testing.expect(P.hasState(.channel_item, .selected));
+    try testing.expect(!P.hasState(.member_row, .unread));
+    try testing.expect(P.hasProp(.message, .bar));
+    try testing.expect(!P.hasProp(.message_time, .weight));
 }

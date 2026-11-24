@@ -2,13 +2,18 @@
 //! mesma ordem em que o app escolhe um tema pelo nome (a pasta do usuário vence a do
 //! repositório, que vence os embutidos).
 const std = @import("std");
-const builtin_themes = @import("builtin_themes");
 const heranca = @import("heranca.zig");
 
 const Base = heranca.Base;
 
+/// Um tema que vem dentro do executável.
+pub const Builtin = struct { name: []const u8, source: []const u8 };
+
+/// Os temas embutidos do app (ele passa os dele ao abrir, antes de carregar temas).
+pub var embutidos: []const Builtin = &.{};
+
 /// Só os embutidos.
-pub const builtin: heranca.Bases = .{ .ctx = &builtin_themes.list, .find = findBuiltin };
+pub const builtin: heranca.Bases = .{ .ctx = @ptrCast(&embutidos), .find = findBuiltin };
 
 fn findBuiltin(_: *const anyopaque, a: std.mem.Allocator, name: []const u8, i: usize) ?Base {
     return if (i == 0) builtinBase(a, name) else null;
@@ -20,7 +25,7 @@ pub fn builtinId(buf: []u8, name: []const u8) []const u8 {
 }
 
 pub fn builtinBase(a: std.mem.Allocator, name: []const u8) ?Base {
-    for (builtin_themes.list) |b| if (std.mem.eql(u8, b.name, name)) return .{
+    for (embutidos) |b| if (std.mem.eql(u8, b.name, name)) return .{
         .src = b.source,
         .id = std.fmt.allocPrint(a, "builtin:{s}", .{name}) catch return null,
         .label = std.fmt.allocPrint(a, "{s}.kdl (built-in)", .{name}) catch return null,
