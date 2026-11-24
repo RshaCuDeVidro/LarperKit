@@ -90,7 +90,7 @@ fn comprimir(b: *std.Build, kit: *std.Build) *std.Build.Step.Compile {
     const m = b.createModule(.{
         .root_source_file = kit.path("tools/comprimir.zig"),
         .target = b.graph.host,
-        .optimize = .ReleaseSafe,
+        .optimize = .safe,
     });
     m.addAnonymousImport("cabecalho", .{ .root_source_file = kit.path("src/core/i18n_cabecalho.zig") });
     return b.addExecutable(.{ .name = "comprimir", .root_module = m });
@@ -125,9 +125,11 @@ pub fn build(b: *std.Build) void {
     }
     const c = translate.createModule();
 
-    // As marcas dos testes visuais (ui/qa.zig): o app liga com -Dqa no build dele.
+    // As marcas dos testes visuais (ui/qa.zig). O padrão é o do larperCord: só no debug,
+    // nunca numa release. O app passa o dele adiante (`b.dependency("larperkit", .{ .qa = qa })`)
+    // para as marcas do kit valerem junto com o robô dele.
     const opts = b.addOptions();
-    opts.addOption(bool, "qa", b.option(bool, "qa", "Compila as marcas dos testes visuais (ui/qa.zig)") orelse false);
+    opts.addOption(bool, "qa", b.option(bool, "qa", "Compila as marcas dos testes visuais (ui/qa.zig); padrão: só no debug") orelse (optimize == .debug));
 
     // A biblioteca: quem usa importa `larperkit` (e pode trocar o `c` pelo dele).
     const mod = b.addModule("larperkit", .{

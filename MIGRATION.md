@@ -57,5 +57,6 @@ are `larpercord-plugin` and `larperCord/plugin/<plugin>/<key>`), its names join 
 | `ctx.fonts` (a `*fonts.Fonts`) | `ctx.fonts`, an optional `lk.draw.Fontes` (`ptr` + `findFn`) until the fonts move |
 | `fonts.Weight`, `fonts.Family` | `lk.familia.Weight`, `lk.familia.Family` (also `lk.draw.Weight`, `lk.draw.Family`) |
 | `ui/parts.zig`: `look(ctx, .message, s)`, `mark(r, .message, s)` | `look(ctx, P, .message, s)`, `mark(r, P, .message, s)` with the app's `P = lk.parts.Partes(…)` |
-| `-Dqa` (the `qa` build option of the app) | `b.dependency("larperkit", .{ .qa = true })`; the kit's `ui/qa.zig` reads its own `build_options.qa` |
+| `-Dqa` (the `qa` build option of the app) | the app passes its own value on: `b.dependency("larperkit", .{ .qa = qa, … })`. The kit's default is the same as larperCord's (on in Debug only), but an app that changes its own must pass it, or its robot runs without the kit's marks, or a release ships with them |
+| the Inspector recording in `inspect/captura.zig` (`kind`, rectangle, QA mark, part) | unchanged: the kit's drawing calls it exactly as before, so `ctl inspect el` and the Inspector card see the same elements |
 | `third_party/fribidi` compiled by the app | compiled by the kit's module |
