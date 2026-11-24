@@ -1,17 +1,14 @@
-//! "Apagar todos os dados" (Configurações → Avançado): o que o --purge do install.sh
-//! e o -Purge do install.ps1 apagam, sem desinstalar o programa. Saem as duas pastas
-//! do larperCord, a das configurações e a do cache (~/.config/larpercord e
-//! ~/.cache/larpercord, ou as do XDG; no Windows %APPDATA%\larpercord e
-//! %LOCALAPPDATA%\larpercord), com tudo dentro: configurações, temas, mascotes, sons,
-//! plugins, rascunhos, mensagens salvas, o cache das conversas, o FFmpeg baixado e
-//! os registros. As contas salvas e os segredos dos plugins saem também do chaveiro
-//! (secret-tool, os serviços larpercord-account, larpercord-plugin e o antigo
-//! larpercord) ou do Gerenciador de Credenciais (larperCord/account/* e
-//! larperCord/plugin/*), e o arquivo do token antigo, ~/.config/larpercord/token.
+//! "Apagar todos os dados" (Configurações → Avançado): o que o desinstalador apagaria,
+//! sem desinstalar o programa. Saem as duas pastas do app, a das configurações e a do
+//! cache (~/.config/<pasta> e ~/.cache/<pasta>, ou as do XDG; no Windows
+//! %APPDATA%\<pasta> e %LOCALAPPDATA%\<pasta>, com a pasta de `app.pasta`), com tudo
+//! dentro. Os segredos no chaveiro saem também: os serviços `<pasta>-<nome>` do
+//! secret-tool, ou `<Nome do app>/<nome>/*` no Gerenciador de Credenciais, para cada nome
+//! de `chaves` (o dos segredos dos plugins já vem).
 //!
-//! Para valer, nada pode gravar de novo depois. `comecar` desliga o registro de
-//! depuração e fecha a porta de quem grava (`on`, conferido em platform/fsutil.zig e
-//! no download do FFmpeg), e o app sai sem salvar nada. `terminar` passa de novo
+//! Para valer, nada pode gravar de novo depois. `comecar` chama `ao_comecar` (o app
+//! desliga o registro de depuração dele ali) e fecha a porta de quem grava (`on`,
+//! conferido em platform/fsutil.zig e em quem baixa arquivos), e o app sai sem salvar nada. `terminar` passa de novo
 //! depois do encerramento, sem nenhuma thread de pé. No Windows, o que o processo
 //! ainda segura (as DLLs do FFmpeg carregadas) sai por uma cópia do programa que
 //! espera este processo acabar (`resto`).
@@ -21,6 +18,17 @@ const std = @import("std");
 const builtin = @import("builtin");
 const c = @import("c");
 const sys = @import("sys.zig");
+const app = @import("../core/app.zig");
+
+/// Os nomes dos segredos do app no chaveiro (ver o topo). "" é o serviço com o nome da
+/// pasta, sem nada depois.
+pub var chaves: []const []const u8 = &.{"plugin"};
+/// Chamado ao começar, antes de apagar qualquer coisa (o registro de depuração do app).
+pub var ao_comecar: ?*const fn () void = null;
+/// O que mais o app apaga a cada passada, depois das pastas (com `permitida`).
+pub var outros: ?*const fn () void = null;
+/// O argumento com que o app se chama de novo no Windows para o que sobrou (`resto`).
+pub const flag_resto = "--apagar-resto";
 
 const windows = builtin.os.tag == .windows;
 /// Mais fundo que isso é um laço de pastas (ou algo que não é nosso).
@@ -37,7 +45,7 @@ pub fn on() bool {
     return ativo.load(.acquire);
 }
 
-/// As duas pastas do larperCord (a das configurações e a do cache).
+/// As duas pastas do app (a das configurações e a do cache).
 pub const Pastas = struct {
     buf: [2][520]u8 = undefined,
     len: [2]usize = .{ 0, 0 },
@@ -57,7 +65,7 @@ pub fn pastas(out: *Pastas) void {
 fn put(out: *Pastas, i: usize, base: []const u8) void {
     // Só caminho absoluto: um XDG_CONFIG_HOME relativo apagaria a partir da pasta atual.
     if (!absolute(base)) return;
-    const p = std.fmt.bufPrintSentinel(&out.buf[i], "{s}/larpercord", .{base}, 0) catch return;
+    const p = std.fmt.bufPrintSentinel(&out.buf[i], "{s}/{s}", .{ base, app.pasta }, 0) catch return;
     out.len[i] = p.len;
 }
 
@@ -72,7 +80,7 @@ pub fn comecar(qa: bool) void {
     if (sys.web) return;
     qa_mode = qa;
     ativo.store(true, .release);
-    @import("debug_log.zig").set(false);
+    if (ao_comecar) |f| f();
     chaveiro();
     _ = passar();
 }
@@ -99,7 +107,7 @@ fn acabar() void {
         return;
     }
     // Linux e macOS apagam até arquivo aberto: o que sobrou lá não tem como sair.
-    if (windows and !qa_mode) chamarResto() else std.log.warn("apagar: sobrou algo nas pastas do larperCord", .{});
+    if (windows and !qa_mode) chamarResto() else std.log.warn("apagar: sobrou algo nas pastas do {s}", .{app.nome});
 }
 
 /// Apaga as pastas. Diz se não sobrou nada.
@@ -113,13 +121,13 @@ fn passar() bool {
         removeTree(p, 0);
         if (sys.exists(p.ptr)) ok = false;
     }
-    if (!windows) tokenAntigo(ps.get(0));
+    if (outros) |f| f();
     return ok;
 }
 
 /// No QA, só o que está dentro de QA_APAGAR_RAIZ (as pastas de mentira da bateria):
 /// rodar o QA sem o ambiente isolado nunca apaga as pastas de quem roda.
-fn permitida(p: [:0]const u8) bool {
+pub fn permitida(p: [:0]const u8) bool {
     if (!qa_mode) return true;
     const env: []const u8 = if (c.SDL_getenv("QA_APAGAR_RAIZ")) |v| std.mem.span(v) else "";
     const raiz = std.mem.trimEnd(u8, env, "/\\");
@@ -128,43 +136,27 @@ fn permitida(p: [:0]const u8) bool {
     return dentro;
 }
 
-/// O token de antes das várias contas ficava sempre em ~/.config/larpercord/token,
-/// mesmo com outro XDG_CONFIG_HOME (net/discord.zig). A pasta sai se ficou vazia.
-fn tokenAntigo(config: ?[:0]const u8) void {
-    const home = std.mem.span(c.SDL_getenv("HOME") orelse return);
-    var db: [520]u8 = undefined;
-    const dir = std.fmt.bufPrintSentinel(&db, "{s}/.config/larpercord", .{home}, 0) catch return;
-    if (config) |cfg| if (std.mem.eql(u8, cfg, dir)) return;
-    if (!permitida(dir)) return;
-    var fb: [540]u8 = undefined;
-    const file = std.fmt.bufPrintSentinel(&fb, "{s}/token", .{dir}, 0) catch return;
-    _ = c.unlink(file.ptr);
-    _ = c.rmdir(dir.ptr);
-}
-
-/// As contas salvas no chaveiro do sistema. No QA nada roda (o chaveiro seria o de
-/// quem roda): só diz o que rodaria.
+/// Os segredos do app no chaveiro do sistema (`chaves`). No QA nada roda (o chaveiro
+/// seria o de quem roda): só diz o que rodaria.
 fn chaveiro() void {
-    if (windows) {
-        if (qa_mode) return std.log.info("apagar: no QA o Gerenciador de Credenciais fica (larperCord/account/*, larperCord/plugin/*)", .{});
-        // As contas e os segredos dos plugins (plugins/host.zig).
-        for ([_][*:0]const u8{ "larperCord/account/*", "larperCord/plugin/*" }) |filter| {
+    for (chaves) |nome| {
+        var b: [256]u8 = undefined;
+        const sep: []const u8 = if (nome.len > 0) "/" else "";
+        if (windows) {
+            const filter = std.fmt.bufPrintSentinel(&b, "{s}{s}{s}/*", .{ app.nome, sep, nome }, 0) catch continue;
+            if (qa_mode) {
+                std.log.info("apagar: no QA o Gerenciador de Credenciais fica ({s})", .{filter});
+                continue;
+            }
             var count: c.DWORD = 0;
             var list: [*c]c.PCREDENTIALA = null;
-            if (c.CredEnumerateA(filter, 0, &count, &list) == 0) continue;
+            if (c.CredEnumerateA(filter.ptr, 0, &count, &list) == 0) continue;
             defer c.CredFree(@ptrCast(list));
             for (0..count) |i| _ = c.CredDeleteA(list[i].*.TargetName, list[i].*.Type, 0);
+            continue;
         }
-        return;
-    }
-    // Uma entrada por conta, a de antes das várias contas (net/accounts_store.zig) e
-    // os segredos dos plugins (plugins/host.zig).
-    const cmds = [_][:0]const u8{
-        "secret-tool clear service larpercord-account 2>/dev/null",
-        "secret-tool clear service larpercord 2>/dev/null",
-        "secret-tool clear service larpercord-plugin 2>/dev/null",
-    };
-    for (cmds) |cmd| {
+        const dash: []const u8 = if (nome.len > 0) "-" else "";
+        const cmd = std.fmt.bufPrintSentinel(&b, "secret-tool clear service {s}{s}{s} 2>/dev/null", .{ app.pasta, dash, nome }, 0) catch continue;
         if (qa_mode) {
             std.log.info("apagar: no QA o chaveiro fica ({s})", .{cmd});
             continue;
@@ -235,13 +227,13 @@ fn chamarResto() void {
     eb[n] = 0;
     var pb: [16]u8 = undefined;
     const pid = std.fmt.bufPrintSentinel(&pb, "{d}", .{c.GetCurrentProcessId()}, 0) catch return;
-    const flag: [:0]const u8 = "--apagar-resto";
+    const flag: [:0]const u8 = flag_resto;
     var argv = [_:null]?[*:0]const u8{ eb[0..n :0].ptr, flag.ptr, pid.ptr };
     if (c.SDL_CreateProcess(@ptrCast(&argv), false)) |p| c.SDL_DestroyProcess(p);
     std.log.info("apagar: o resto sai depois que o app fechar", .{});
 }
 
-/// `larpercord --apagar-resto PID` (só o próprio app chama, ver `chamarResto`): espera o
+/// `<app> --apagar-resto PID` (só o próprio app chama, ver `chamarResto`): espera o
 /// processo PID acabar e apaga as pastas, tentando de novo por uns segundos.
 pub fn resto(pid: u32) void {
     if (sys.web) return;

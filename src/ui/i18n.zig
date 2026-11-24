@@ -6,9 +6,10 @@
 //!     fmt(&buf, "Respondendo a {s}", "Replying to {s}", .{nome})
 //!     plural(&buf, n, "{d} voto", "{d} votos", "{d} vote", "{d} votes", .{n})
 //!
-//! Os outros idiomas vêm de arquivos, com o texto em inglês como chave: os de i18n/*.kdl
-//! (embutidos no executável, comprimidos; build.zig acha sozinho cada arquivo da pasta) e
-//! os da pasta larpercord/i18n/ nas configurações. Cada arquivo diz quem é, no começo:
+//! Os outros idiomas vêm de arquivos, com o texto em inglês como chave: os do app, embutidos
+//! no executável e comprimidos (a função `traducoes` do build.zig do kit acha sozinha cada
+//! arquivo da pasta, e o app passa o resultado em `embutir`), e os da pasta i18n/ dentro da
+//! de configurações do app. Cada arquivo diz quem é, no começo:
 //!
 //!     language "日本語" code="ja" english="Japanese"
 //!
@@ -29,7 +30,32 @@ const embutido = @import("../core/embutido.zig");
 const cabecalho = @import("../core/i18n_cabecalho.zig");
 const c = @import("c");
 const kdl = @import("../theme/kdl.zig");
-const embutidos = @import("i18n_embutidos");
+
+// --- Os arquivos embutidos do app -----------------------------------------------------
+
+/// Um arquivo de tradução embutido: o nome sem o .kdl, e o texto comprimido com o cabeçalho
+/// na frente (tools/comprimir.zig --i18n), como sai do módulo que `traducoes` gera.
+pub const Embutido = struct { name: []const u8, data: []const u8 };
+
+var emb_files: []const Embutido = &.{};
+/// i18n/keys.txt do app, comprimido: os textos em inglês do código (a porcentagem
+/// traduzida). Vazio: sem porcentagem.
+var emb_keys: []const u8 = "";
+
+/// Os idiomas embutidos do app: o módulo que `traducoes` gera (`lk.i18n.embutir(@import(
+/// "traducoes"))`). Chamar ao abrir, na thread da interface, antes de mostrar a lista de
+/// idiomas.
+pub fn embutir(comptime M: type) void {
+    const list = comptime blk: {
+        var out: [M.files.len]Embutido = undefined;
+        for (M.files, &out) |f, *o| o.* = .{ .name = f.name, .data = f.data };
+        break :blk out;
+    };
+    emb_files = &list;
+    emb_keys = M.keys;
+    no_keys = false;
+    if (inited) registerEmbedded();
+}
 
 // --- O idioma em uso ----------------------------------------------------------------
 
@@ -749,9 +775,14 @@ fn ensureInit() void {
     langs[0] = .{ .code = "pt", .name = "Português (Brasil)", .english = "Portuguese", .kind = .pt, .font_script = "pt" };
     langs[1] = .{ .code = "en", .name = "English (US)", .english = "English", .kind = .en, .font_script = "en" };
     n_langs = 2;
+    registerEmbedded();
+}
+
+/// Os idiomas dos arquivos embutidos (repetir não duplica: o código acha o que já existe).
+fn registerEmbedded() void {
     var tmp: std.heap.ArenaAllocator = .init(std.heap.c_allocator);
     defer tmp.deinit();
-    for (embutidos.files) |f| {
+    for (emb_files) |f| {
         const p = cabecalho.split(f.data) orelse continue;
         var diag: kdl.Diagnostic = .{};
         const nodes = kdl.parse(tmp.allocator(), p.header, &diag) catch {
@@ -880,7 +911,7 @@ fn pickSystem(lang: []const u8, country: []const u8) ?usize {
 
 pub const UserFile = struct { name: []const u8, text: []const u8 };
 
-/// Os arquivos de larpercord/i18n/ (todos os .kdl de lá, a cada vez que a pasta muda): um
+/// Os arquivos de i18n/ da pasta do app (todos os .kdl de lá, a cada vez que a pasta muda): um
 /// código novo vira um idioma, o de um embutido vale por cima dele. Devolve verdadeiro se
 /// o texto do idioma em uso mudou (o arquivo dele mudou e a tabela foi refeita). Só na
 /// thread da interface.
@@ -1075,7 +1106,8 @@ fn buildInto(a: std.mem.Allocator, info: *const Info) ?*const Table {
 const KeySet = std.StringHashMapUnmanaged(void);
 
 fn keySet(a: std.mem.Allocator) ?KeySet {
-    const text = embutido.inflate(a, embutidos.keys) catch return null;
+    if (emb_keys.len == 0) return null;
+    const text = embutido.inflate(a, emb_keys) catch return null;
     var keys: KeySet = .empty;
     var it = std.mem.splitScalar(u8, text, '\n');
     while (it.next()) |line| {
@@ -1130,7 +1162,12 @@ const testing = std.testing;
 /// arquivo da pasta de configurações, sem nada no código saber dele.
 const xx_file = @embedFile("i18n_xx.kdl");
 
+/// Os arquivos de exemplo (src/ui/exemplo_i18n/: o japonês e o russo do larperCord, só com o
+/// que estes testes usam), embutidos como o build embute os de um app.
+const exemplo = @import("i18n_exemplo");
+
 test "idioma padrão e troca" {
+    embutir(exemplo);
     const old = current();
     defer set(old);
     set("ja");
@@ -1154,6 +1191,7 @@ test "idioma padrão e troca" {
 
 // O japonês sem tradução cai no inglês também no fmt (não no português).
 test "fallback do japonês no fmt" {
+    embutir(exemplo);
     const old = current();
     defer set(old);
     set("ja");
@@ -1221,6 +1259,7 @@ test "formatar com a tradução, na ordem dela" {
 }
 
 test "fmt, fmtZ e allocPrint traduzidos" {
+    embutir(exemplo);
     const old = current();
     defer set(old);
     set("ja");
@@ -1247,9 +1286,10 @@ test "fmt, fmtZ e allocPrint traduzidos" {
 // arquivo), sem chave repetida, e cada tradução de texto de formato com os marcadores
 // certos, em cada forma de plural (faltar tradução não é erro).
 test "i18n/*.kdl embutidos: cabeçalho, arquivo válido e marcadores certos" {
+    embutir(exemplo);
     var bad_n: usize = 0;
-    try testing.expect(embutidos.files.len >= 2);
-    for (embutidos.files) |f| {
+    try testing.expect(emb_files.len >= 2);
+    for (emb_files) |f| {
         var a: std.heap.ArenaAllocator = .init(testing.allocator);
         defer a.deinit();
         var diag: kdl.Diagnostic = .{};
@@ -1297,6 +1337,7 @@ test "i18n/*.kdl embutidos: cabeçalho, arquivo válido e marcadores certos" {
 }
 
 test "os idiomas embutidos aparecem sozinhos, com o nome do arquivo" {
+    embutir(exemplo);
     const ls = languages();
     try testing.expectEqualStrings("pt", ls[0].code);
     try testing.expectEqualStrings("en", ls[1].code);
@@ -1315,6 +1356,7 @@ test "os idiomas embutidos aparecem sozinhos, com o nome do arquivo" {
 }
 
 test "russo: tabela do arquivo e fallback em inglês" {
+    embutir(exemplo);
     const old = current();
     defer set(old);
     set("ru");
@@ -1327,6 +1369,7 @@ test "russo: tabela do arquivo e fallback em inglês" {
 }
 
 test "idioma do sistema: o código com a região, depois o idioma" {
+    embutir(exemplo);
     ensureInit();
     try testing.expectEqual(match("ru").?, pickSystem("ru", "RU").?);
     try testing.expectEqual(@as(usize, 0), pickSystem("pt", "BR").?);
@@ -1337,6 +1380,7 @@ test "idioma do sistema: o código com a região, depois o idioma" {
 }
 
 test "configuração antiga (número) e nova (código)" {
+    embutir(exemplo);
     try testing.expectEqualStrings("ja", legacyCode(3));
     try testing.expectEqualStrings("ru", legacyCode(4));
     try testing.expectEqualStrings("", legacyCode(0));
@@ -1352,6 +1396,7 @@ test "configuração antiga (número) e nova (código)" {
 // (status_menu.zig, widgets.zig, profile.zig): o {N} conta os marcadores do texto
 // em inglês, não os argumentos, e é fácil trocar dia e mês.
 test "datas dos arquivos embutidos na ordem de cada idioma" {
+    embutir(exemplo);
     const old = current();
     defer set(old);
     var buf: [64]u8 = undefined;
@@ -1369,6 +1414,7 @@ test "datas dos arquivos embutidos na ordem de cada idioma" {
 }
 
 test "texto que não cabe no buffer conta como cortado (debug)" {
+    embutir(exemplo);
     const old = current();
     defer set(old);
     set("ru");
@@ -1383,6 +1429,7 @@ test "texto que não cabe no buffer conta como cortado (debug)" {
 }
 
 test "arquivo de tradução: erros" {
+    embutir(exemplo);
     var a: std.heap.ArenaAllocator = .init(testing.allocator);
     defer a.deinit();
     const A = a.allocator();
@@ -1436,6 +1483,7 @@ test "arquivo de tradução: formas de plural" {
 }
 
 test "plural: categorias do CLDR para números inteiros" {
+    embutir(exemplo);
     const Case = struct { Rule, u64, Plural };
     const cases = [_]Case{
         .{ .east_slavic, 1, .one },   .{ .east_slavic, 21, .one },    .{ .east_slavic, 101, .one },  .{ .east_slavic, 11, .many },
@@ -1493,6 +1541,7 @@ test "plural: categorias do CLDR para números inteiros" {
 }
 
 test "plural em português, inglês e nos arquivos" {
+    embutir(exemplo);
     const old = current();
     defer set(old);
     var buf: [64]u8 = undefined;
@@ -1521,6 +1570,7 @@ test "plural em português, inglês e nos arquivos" {
 // (nunca no português) no que falta, usa as regras de plural que o arquivo pede, e o
 // arquivo recarregado troca o texto na hora. Nenhuma linha de código sabe do "xx".
 test "idioma novo só com um arquivo (xx), recarregado na hora" {
+    embutir(exemplo);
     const old = current();
     defer set(old);
     defer _ = setUserFiles(&.{});
@@ -1591,6 +1641,7 @@ test "idioma novo só com um arquivo (xx), recarregado na hora" {
 }
 
 test "arquivo da pasta por cima do embutido" {
+    embutir(exemplo);
     const old = current();
     defer set(old);
     defer _ = setUserFiles(&.{});

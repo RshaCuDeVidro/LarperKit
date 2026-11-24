@@ -1,0 +1,101 @@
+a '}' is missing
+a /* comment that isn't closed
+a plural form is a text in quotes
+a text that isn't closed
+an extra '}'
+code: letters, digits and -, up to 15 (\"ja\", \"pt-PT\")
+direction: \"ltr\" or \"rtl\"
+expected \"English\" \"translation\"
+expected a name
+expected direction \"ltr\" or \"rtl\"
+expected font-script \"ja\"
+expected language \"Name\" code=\"xx\"
+expected plurals \"ru\"
+font-script: a code like \"ja\", \"zh\" or \"ko\"
+invalid escape
+invalid number
+Language
+number too long
+plurals: a language code the app knows
+Replying to {s}
+Sign in
+the language name is empty
+Today at {s}
+too many nested blocks
+unknown plural form (zero, one, two, few, many or other)
+until {1d:0>2}/{0d:0>2} {2s}
+Yesterday at {s}
+{1d:0>2}/{0d:0>2}/{2d} {3s}
+{1s} {0d}, {2d}
+{d} tabs
+{d} votes
+  (same, not drawn)
+  [LIVE]
+  ·  partly clipped
+ (muted)
+ [deaf:srv]
+ [deaf]
+ [mute:srv]
+ [mute]
+ or 
+ · not found
+#RRGGBB or #RRGGBBAA. Applies only to this theme and mode.
+(deleted)
+(edited)
+(no text)
+(outside the layout)
++ Add a note
+// NODE 01 · LEVEL -3
+0 no blush · 6 strongest
+0% (sleeps until there are events)
+1 day
+1 h
+1 hour
+1 new message · jump to the first
+1 week
+10 min
+10 min limit
+12 hours
+15 min
+24 hours
+24-hour clock
+3 days
+30 days
+30 min
+4 h
+5 min
+6 hours
+60 sec
+7 days
+8 accounts saved already; remove one to save this one
+@ OFF
+@ ON
+@mentions stay in the text, without pinging
+[a]
+[attachment]
+[attachments]
+[audio]
+[call]
+[chat]
+[hang up]
+[image]
+[invite]
+[leave]
+[m]
+[mic]
+[mixer]
+[no text]
+[pop out]
+[video]
+[view]
+[voice message]
+Center
+Fill
+Fit
+\nPush to talk from a system shortcut: ptt-down on key press and ptt-up on release\n(Settings → Voice → Push to talk). Needs Settings → Advanced → External control on.\nExits with 0 when it worked, 1 when it didn't.\nLARPER_CTL=1 on both sides talks to a demo (--demo) started with it.\nExamples (Hyprland, Sway, KDE, GNOME, waybar, polybar, Windows): docs/ctl.md\n
+A channel with new messages opens at them, like Discord. When off, it opens at the bottom.
+A colored strip with the server name above the channels.
+A copy goes without the GPS, the camera model and the rest hidden in the file (JPEG, PNG, WebP, MP4 and MOV). The file on your computer stays as it is.
+A curtain of light in the theme colors behind the cards. Still: generated once.
+A downloaded file doesn't match: nothing was installed.
+a file

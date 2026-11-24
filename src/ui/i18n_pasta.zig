@@ -1,5 +1,5 @@
-//! A pasta de traduções: <config>/larpercord/i18n/*.kdl (~/.config/larpercord/i18n no
-//! Linux, ou $XDG_CONFIG_HOME/larpercord/i18n; %APPDATA%\larpercord\i18n no Windows). Um
+//! A pasta de traduções: <config>/<pasta do app>/i18n/*.kdl (~/.config/<pasta>/i18n no
+//! Linux, ou $XDG_CONFIG_HOME/<pasta>/i18n; %APPDATA%\<pasta>\i18n no Windows). Um
 //! arquivo de lá com um código novo é um idioma novo; com o código de um embutido, vale por
 //! cima dele (ui/i18n.zig). O vigia (platform/vigia.zig, o mesmo dos temas) relê a pasta
 //! quando um arquivo é salvo: a tradução muda na hora, sem reabrir o app.

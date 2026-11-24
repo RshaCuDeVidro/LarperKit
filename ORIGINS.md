@@ -108,6 +108,10 @@ an app does, so the theme tests run against a real app. Its tables were moved ou
 `src/theme/schema.zig` and `src/theme/parts.zig` (`ac44662`). `src/theme/exemplo_cord/classico.kdl`
 and `zen.kdl` are `themes/classico.kdl` and `themes/zen.kdl` from `b5b3fc2`.
 
+`src/ui/exemplo_i18n/ja.kdl` and `ru.kdl` hold the entries of larperCord's `i18n/ja.kdl` and
+`i18n/ru.kdl` (`b5b3fc2`) that the tests in `src/ui/i18n.zig` use, plus some more Japanese ones;
+`keys.txt` lists the keys of `ja.kdl`.
+
 ## WooferSoundPad
 
 [WooferSoundPad](https://github.com/RshaCuDeVidro/WooferSoundPad), branch `main`.

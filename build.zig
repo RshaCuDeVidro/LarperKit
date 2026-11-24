@@ -1,5 +1,72 @@
 const std = @import("std");
 
+/// As traduções de um app, embutidas: cada `<pasta>/<código>.kdl` é um idioma, sem lista no
+/// código (um arquivo novo entra no próximo build), comprimido com o cabeçalho na frente
+/// (tools/comprimir.zig --i18n), e `<pasta>/keys.txt`, se houver, os textos em inglês do
+/// código (a porcentagem traduzida). O app importa o módulo e passa ao kit ao abrir:
+/// `lk.i18n.embutir(@import("traducoes"))`.
+///
+///     const kit = b.dependency("larperkit", .{});
+///     mod.addImport("traducoes", @import("larperkit").traducoes(b, kit.builder, "i18n"));
+///
+/// `pasta` é relativa à raiz do projeto de `b`; `kit` é o builder do LarperKit.
+pub fn traducoes(b: *std.Build, kit: *std.Build, pasta: []const u8) *std.Build.Module {
+    const io = b.graph.io;
+    // A lista muda quando um arquivo entra ou sai da pasta: o build relê.
+    b.dependOnDirectoryContents(b.path(pasta));
+    var dir = b.root.openDir(io, pasta, .{ .iterate = true }) catch std.debug.panic("sem a pasta {s}", .{pasta});
+    defer dir.close(io);
+    var names: std.ArrayList([]const u8) = .empty;
+    var has_keys = false;
+    var it = dir.iterate();
+    while (it.next(io) catch std.debug.panic("{s} ilegível", .{pasta})) |e| {
+        if (e.kind != .file) continue;
+        if (std.mem.eql(u8, e.name, "keys.txt")) has_keys = true;
+        if (!std.mem.endsWith(u8, e.name, ".kdl")) continue;
+        names.append(b.allocator, b.dupe(e.name)) catch @panic("OOM");
+    }
+    std.mem.sort([]const u8, names.items, {}, struct {
+        fn lt(_: void, x: []const u8, y: []const u8) bool {
+            return std.mem.lessThan(u8, x, y);
+        }
+    }.lt);
+    const tool = comprimir(b, kit);
+    const wf = b.addWriteFiles();
+    var src: std.ArrayList(u8) = .empty;
+    src.appendSlice(b.allocator,
+        \\//! Gerado pelo build.zig do LarperKit: as traduções do app, comprimidas (ver
+        \\//! src/ui/i18n.zig do kit).
+        \\pub const files = [_]struct { name: []const u8, data: []const u8 }{
+        \\
+    ) catch @panic("OOM");
+    for (names.items) |name| {
+        const run = b.addRunArtifact(tool);
+        run.addArg("--i18n");
+        run.addFileArg(b.path(b.fmt("{s}/{s}", .{ pasta, name })));
+        _ = wf.addCopyFile(run.addOutputFileArg(b.fmt("{s}.z", .{name})), b.fmt("{s}.z", .{name}));
+        src.appendSlice(b.allocator, b.fmt("    .{{ .name = \"{s}\", .data = @embedFile(\"{s}.z\") }},\n", .{ name[0 .. name.len - 4], name })) catch @panic("OOM");
+    }
+    src.appendSlice(b.allocator, "};\n") catch @panic("OOM");
+    if (has_keys) {
+        const keys = b.addRunArtifact(tool);
+        keys.addFileArg(b.path(b.fmt("{s}/keys.txt", .{pasta})));
+        _ = wf.addCopyFile(keys.addOutputFileArg("keys.txt.z"), "keys.txt.z");
+        src.appendSlice(b.allocator, "pub const keys: []const u8 = @embedFile(\"keys.txt.z\");\n") catch @panic("OOM");
+    } else src.appendSlice(b.allocator, "pub const keys: []const u8 = \"\";\n") catch @panic("OOM");
+    return b.createModule(.{ .root_source_file = wf.add("traducoes.zig", src.items) });
+}
+
+/// tools/comprimir.zig, para a máquina que compila.
+fn comprimir(b: *std.Build, kit: *std.Build) *std.Build.Step.Compile {
+    const m = b.createModule(.{
+        .root_source_file = kit.path("tools/comprimir.zig"),
+        .target = b.graph.host,
+        .optimize = .ReleaseSafe,
+    });
+    m.addAnonymousImport("cabecalho", .{ .root_source_file = kit.path("src/core/i18n_cabecalho.zig") });
+    return b.addExecutable(.{ .name = "comprimir", .root_module = m });
+}
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -46,6 +113,8 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .link_libc = true,
     });
+    // Os testes das traduções embutem o japonês e o russo de exemplo como um app embutiria.
+    test_mod.addImport("i18n_exemplo", traducoes(b, b, "src/ui/exemplo_i18n"));
     const tests = b.addTest(.{ .name = "larperkit-test", .root_module = test_mod });
     b.step("test", "Roda os testes").dependOn(&b.addRunArtifact(tests).step);
     // O executável dos testes, para rodar em outra máquina (o CI compila para Windows no

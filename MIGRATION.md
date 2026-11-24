@@ -19,3 +19,21 @@ for that move; larperCord's move is the reference, since most of the code came f
 | `"needs a newer larperCord"` | `lk.app.nome = "larperCord"` at startup |
 | `"larpercord-theme"` and `"larpercord"` in the theme LSP | built from `lk.app.pasta` |
 | `src/c.h` | the kit's `c` module has SDL3, Dear ImGui and the libc headers it uses; an app with more C keeps its own and replaces the kit's with `addImport("c", …)` on the `larperkit` module |
+
+## Translations (`src/ui/i18n.zig`, `src/ui/i18n_pasta.zig`)
+
+| Before (larperCord) | After (LarperKit) |
+| --- | --- |
+| `i18nModule` in `build.zig`, imported as `i18n_embutidos` | `@import("larperkit").traducoes(b, kit.builder, "i18n")` in the app's `build.zig`, imported under any name, then `lk.i18n.embutir(@import("traducoes"))` at startup |
+| `tools/comprimir.zig` in the app | the kit's (the build function uses it) |
+| `"larpercord"` in the translations folder | `lk.app.pasta` |
+
+## Files (`src/platform/fsutil.zig`, `src/platform/apagar.zig`)
+
+| Before (larperCord) | After (LarperKit) |
+| --- | --- |
+| `"larpercord"` in `fsutil.configPath` and `ensureDir` | `lk.app.pasta` |
+| `apagar.comecar` turning off `debug_log` | `apagar.ao_comecar = &desligaRegistro` |
+| `apagar` removing the old token (`~/.config/larpercord/token`) | the app does it in `apagar.outros` (with `apagar.permitida`) |
+| the keychain entries `larpercord-account`, `larpercord`, `larpercord-plugin` (and `larperCord/account/*`, `larperCord/plugin/*` on Windows) | `apagar.chaves = &.{ "account", "", "plugin" }` with `lk.app.nome = "larperCord"` and `lk.app.pasta = "larpercord"` |
+| `"--apagar-resto"` | `apagar.flag_resto`; the app's command line still calls `apagar.resto(pid)` |

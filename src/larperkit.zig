@@ -19,6 +19,11 @@ pub const custom = @import("theme/custom.zig");
 pub const lsp_tema = @import("theme/lsp_tema.zig");
 pub const theme_manager = @import("theme/manager.zig");
 
+// --- Traduções -----------------------------------------------------------------------
+pub const i18n = @import("ui/i18n.zig");
+pub const i18n_pasta = @import("ui/i18n_pasta.zig");
+pub const vigia = @import("platform/vigia.zig");
+
 pub const anim = @import("ui/anim.zig");
 pub const procgen = @import("ui/procgen.zig");
 pub const jsonx = @import("net/jsonx.zig");
