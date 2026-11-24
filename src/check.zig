@@ -7,6 +7,8 @@ const lk = @import("larperkit");
 /// se importam uns aos outros; sem limite, o laço não acaba).
 fn refAll(comptime T: type, comptime depth: u8) void {
     inline for (comptime std.meta.declarations(T)) |name| {
+        // O C traduzido não é do kit (e é enorme).
+        if (comptime std.mem.eql(u8, name, "c")) continue;
         const v = @field(T, name);
         if (@TypeOf(v) == type) {
             if (depth > 0) switch (@typeInfo(v)) {

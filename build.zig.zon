@@ -3,7 +3,14 @@
     .version = "0.1.0",
     .fingerprint = 0x7fbdbd8608be33e,
     .minimum_zig_version = "0.17.0",
-    .dependencies = .{},
+    .dependencies = .{
+        // A SDL3 do Windows (MinGW): só baixa quando o alvo é Windows.
+        .sdl3_mingw = .{
+            .url = "https://github.com/libsdl-org/SDL/releases/download/release-3.4.20/SDL3-devel-3.4.20-mingw.tar.gz",
+            .hash = "N-V-__8AAL9ILQHjr18mxHu8r6dUojAYwBx9Mt6MTapadcyI",
+            .lazy = true,
+        },
+    },
     .paths = .{
         "build.zig",
         "build.zig.zon",

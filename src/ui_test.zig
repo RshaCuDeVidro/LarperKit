@@ -2,7 +2,7 @@
 //! cada quadro passa pelo NewFrame e pelo Render do ImGui, com o mouse que o teste mexe.
 const std = @import("std");
 const lk = @import("larperkit");
-const c = @import("c");
+const c = lk.c;
 const d = lk.draw;
 const comp = lk.components;
 const testing = std.testing;

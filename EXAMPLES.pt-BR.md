@@ -58,7 +58,7 @@ primeiro botão com o mouse em cima):
 ## Para gerar de novo
 
 ```sh
-tools/deps.sh                       # as fontes Inter e JetBrains Mono (e a SDL3 do Windows)
+tools/deps.sh                       # as fontes Inter e JetBrains Mono
 zig build vitrine
 SDL_VIDEO_DRIVER=offscreen zig-out/bin/vitrine --out docs/images --fonts .deps/fonts --lang pt --frames frames
 ffmpeg -framerate 30 -i frames/f%04d.png \

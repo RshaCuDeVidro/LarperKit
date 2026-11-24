@@ -8,7 +8,7 @@
 //! próprio ImGui. `--frames`: também os quadros da animação, um PNG por quadro.
 const std = @import("std");
 const lk = @import("larperkit");
-const c = @import("c");
+const c = lk.c;
 const d = lk.draw;
 const comp = lk.components;
 const tr = lk.i18n.tr;

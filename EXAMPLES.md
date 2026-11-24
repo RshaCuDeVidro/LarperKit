@@ -58,7 +58,7 @@ first button with the mouse over it):
 ## Making them again
 
 ```sh
-tools/deps.sh                       # the Inter and JetBrains Mono fonts (and SDL3 for Windows)
+tools/deps.sh                       # the Inter and JetBrains Mono fonts
 zig build vitrine
 SDL_VIDEO_DRIVER=offscreen zig-out/bin/vitrine --out docs/images --fonts .deps/fonts --lang en --frames frames
 ffmpeg -framerate 30 -i frames/f%04d.png \

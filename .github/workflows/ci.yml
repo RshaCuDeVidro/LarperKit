@@ -3,20 +3,36 @@ on: [push, pull_request]
 jobs:
   linux:
     runs-on: ubuntu-latest
+    env:
+      PKG_CONFIG_PATH: ${{ github.workspace }}/.deps/sdl3-linux/lib/pkgconfig
+      LD_LIBRARY_PATH: ${{ github.workspace }}/.deps/sdl3-linux/lib
     steps:
       - uses: actions/checkout@v4
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.17.0
       - run: zig build test --summary all
-      # O que chama a SDL e o ImGui (os testes não chamam): compila sem ligar nada, com os
-      # headers da SDL3 baixados (o Ubuntu do CI não tem a SDL3).
+      # O Ubuntu do CI não tem a SDL3: compilada do código-fonte (só muda com o script).
+      - uses: actions/cache@v4
+        with:
+          path: .deps/sdl3-linux
+          key: sdl3-linux-${{ hashFiles('tools/sdl3_linux.sh') }}
+      - run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ninja-build
+      - run: tools/sdl3_linux.sh
+      # O que chama a SDL e o ImGui (os testes não chamam), os componentes num ImGui de verdade
+      # sem janela, e a vitrine gravando as fotos dos exemplos sem janela.
+      - run: zig build check
+      - run: zig build test-ui --summary all
       - run: tools/deps.sh
-      - run: zig build check -Dsdl-include=.deps/windows/include
-      # Os componentes num ImGui de verdade, sem janela.
-      - run: zig build test-ui -Dsdl-include=.deps/windows/include --summary all
+      - run: zig build vitrine
+      - run: SDL_VIDEO_DRIVER=offscreen zig-out/bin/vitrine --out fotos --fonts .deps/fonts --lang en
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vitrine
+          path: fotos/
 
-  # Os testes saem do Linux para Windows (x86_64-windows-gnu) e rodam num Windows de verdade.
+  # O build para Windows sai do Linux (x86_64-windows-gnu; a SDL3 do MinGW vem pelo
+  # build.zig.zon) e os testes rodam num Windows de verdade.
   windows-build:
     runs-on: ubuntu-latest
     steps:
@@ -24,11 +40,8 @@ jobs:
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.17.0
-      - run: tools/deps.sh
       - run: zig build check -Dtarget=x86_64-windows-gnu
-      - run: zig build test-bin test-ui-bin -Dtarget=x86_64-windows-gnu -p out
-      # A vitrine (examples/vitrine) compila para Windows.
-      - run: zig build vitrine -Dtarget=x86_64-windows-gnu
+      - run: zig build test-bin test-ui-bin vitrine -Dtarget=x86_64-windows-gnu -p out
       - uses: actions/upload-artifact@v4
         with:
           name: windows-tests

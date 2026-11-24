@@ -126,11 +126,20 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const windows = target.result.os.tag == .windows;
-    // O que não está no repositório (tools/deps.sh): a SDL3 do Windows.
-    const deps_opt = b.option([]const u8, "deps", "Pasta das dependências (tools/deps.sh; padrão: .deps)") orelse ".deps";
-    const deps: std.Build.LazyPath = if (std.fs.path.isAbsolute(deps_opt)) .{ .cwd_relative = deps_opt } else b.path(deps_opt);
     // Headers da SDL3 de outra pasta no lugar dos do sistema (o CI não tem a SDL3 instalada).
     const sdl_include = b.option([]const u8, "sdl-include", "Pasta com SDL3/SDL.h (padrão: a do sistema, pelo pkg-config)");
+    // O Dear ImGui do kit (com as mudanças do larperCord) e os backends da SDL3, compilados no
+    // módulo. Um app que compila o próprio ImGui (o larperCord, com FreeType) desliga.
+    const with_imgui = b.option(bool, "imgui", "Compila o Dear ImGui do kit no módulo (padrão: sim)") orelse true;
+    // A SDL3 ligada no módulo. Um app que liga a dele de outro jeito (estática, numa release)
+    // desliga e liga a dele.
+    const link_sdl = b.option(bool, "link-sdl", "Liga a SDL3 no módulo (padrão: sim)") orelse true;
+    // A SDL3 do Windows (a do MinGW): o build baixa sozinho, pelo build.zig.zon, quando o alvo
+    // é Windows.
+    const win_sdl: ?std.Build.LazyPath = if (windows and sdl_include == null) blk: {
+        const dep = b.lazyDependency("sdl3_mingw", .{}) orelse break :blk null;
+        break :blk dep.path("SDL3-3.4.20/x86_64-w64-mingw32");
+    } else null;
 
     // Headers C (SDL3, Dear ImGui, libc) traduzidos num módulo Zig.
     const translate = b.addTranslateC(.{
@@ -144,9 +153,9 @@ pub fn build(b: *std.Build) void {
     translate.defineCMacro("IMGUI_USE_WCHAR32", "1");
     if (sdl_include) |dir| {
         translate.addIncludePath(.{ .cwd_relative = dir });
-    } else if (windows) {
-        translate.addIncludePath(deps.path(b, "windows/include"));
-    } else {
+    } else if (win_sdl) |w| {
+        translate.addIncludePath(w.path(b, "include"));
+    } else if (!windows) {
         translate.linkSystemLibrary("sdl3", .{});
     }
     const c = translate.createModule();
@@ -157,16 +166,37 @@ pub fn build(b: *std.Build) void {
     const opts = b.addOptions();
     opts.addOption(bool, "qa", b.option(bool, "qa", "Compila as marcas dos testes visuais (ui/qa.zig); padrão: só no debug") orelse (optimize == .debug));
 
-    // A biblioteca: quem usa importa `larperkit` (e pode trocar o `c` pelo dele).
+    // A biblioteca: quem usa importa `larperkit` e ganha junto o ImGui, os backends e a SDL3
+    // (veja "Using it in an app" no README). O `c` dela é `larperkit.c`.
     const mod = b.addModule("larperkit", .{
         .root_source_file = b.path("src/larperkit.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
+        .link_libcpp = with_imgui,
     });
     mod.addImport("c", c);
     mod.addOptions("build_options", opts);
     addFribidi(b, mod);
+    if (sdl_include) |dir| mod.addIncludePath(.{ .cwd_relative = dir });
+    if (win_sdl) |w| {
+        mod.addIncludePath(w.path(b, "include"));
+        // O app instala junto do .exe: `dep.namedLazyPath("SDL3.dll")`.
+        b.addNamedLazyPath("SDL3.dll", w.path(b, "bin/SDL3.dll"));
+    }
+    if (with_imgui) {
+        addImgui(b, mod, true);
+        // O ImGui usa o IME e a área de transferência do Windows.
+        if (windows) for ([_][]const u8{ "imm32", "user32", "gdi32", "ole32", "shell32" }) |l| mod.linkSystemLibrary(l, .{ .use_pkg_config = .no });
+    }
+    if (link_sdl) {
+        if (win_sdl) |w| {
+            mod.addLibraryPath(w.path(b, "lib"));
+            mod.linkSystemLibrary("SDL3.dll", .{ .use_pkg_config = .no });
+        } else if (sdl_include != null) {
+            mod.linkSystemLibrary("SDL3", .{ .use_pkg_config = .no });
+        } else if (!windows) mod.linkSystemLibrary("sdl3", .{});
+    }
 
     // Testes das partes puras (sem janela nem GPU, sem SDL): rodam em qualquer CI. Para
     // Windows saindo do Linux, `-fwine` roda com o wine.
@@ -186,21 +216,19 @@ pub fn build(b: *std.Build) void {
     // Linux e roda num Windows de verdade).
     b.step("test-bin", "Instala o executável dos testes").dependOn(&b.addInstallArtifact(tests, .{}).step);
 
-    // Os componentes num ImGui de verdade, sem janela: o ImGui do kit compilado junto (sem
-    // FreeType: as letras do próprio ImGui bastam para medir e clicar).
+    // Os componentes num ImGui de verdade, sem janela, com o módulo como um app o usa.
     const ui_mod = b.createModule(.{
         .root_source_file = b.path("src/ui_test.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
-        .link_libcpp = true,
     });
     ui_mod.addImport("larperkit", mod);
-    ui_mod.addImport("c", c);
-    addImgui(b, ui_mod, false);
     const ui_tests = b.addTest(.{ .name = "larperkit-test-ui", .root_module = ui_mod });
     b.step("test-ui", "Roda os testes dos componentes num ImGui sem janela").dependOn(&b.addRunArtifact(ui_tests).step);
-    b.step("test-ui-bin", "Instala o executável dos testes dos componentes").dependOn(&b.addInstallArtifact(ui_tests, .{}).step);
+    const ui_bin = b.step("test-ui-bin", "Instala o executável dos testes dos componentes");
+    ui_bin.dependOn(&b.addInstallArtifact(ui_tests, .{}).step);
+    if (win_sdl) |w| ui_bin.dependOn(&b.addInstallBinFile(w.path(b, "bin/SDL3.dll"), "SDL3.dll").step);
 
     // A vitrine (examples/vitrine): cada componente em cada tema, desenhado sem janela
     // (driver offscreen da SDL) e gravado em PNG, para os exemplos da documentação.
@@ -209,22 +237,12 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
         .link_libc = true,
-        .link_libcpp = true,
     });
     vit_mod.addImport("larperkit", mod);
-    vit_mod.addImport("c", c);
-    addImgui(b, vit_mod, true);
-    if (windows) {
-        vit_mod.addIncludePath(deps.path(b, "windows/include"));
-        vit_mod.addLibraryPath(deps.path(b, "windows/lib"));
-        vit_mod.linkSystemLibrary("SDL3.dll", .{ .use_pkg_config = .no });
-        for ([_][]const u8{ "gdi32", "imm32", "ole32", "user32", "shell32", "setupapi", "version", "winmm" }) |l| vit_mod.linkSystemLibrary(l, .{ .use_pkg_config = .no });
-    } else if (sdl_include) |dir| {
-        vit_mod.addIncludePath(.{ .cwd_relative = dir });
-        vit_mod.linkSystemLibrary("SDL3", .{ .use_pkg_config = .no });
-    } else vit_mod.linkSystemLibrary("sdl3", .{});
     const vitrine = b.addExecutable(.{ .name = "vitrine", .root_module = vit_mod });
-    b.step("vitrine", "Compila a vitrine (examples/vitrine)").dependOn(&b.addInstallArtifact(vitrine, .{}).step);
+    const vit_step = b.step("vitrine", "Compila a vitrine (examples/vitrine)");
+    vit_step.dependOn(&b.addInstallArtifact(vitrine, .{}).step);
+    if (win_sdl) |w| vit_step.dependOn(&b.addInstallBinFile(w.path(b, "bin/SDL3.dll"), "SDL3.dll").step);
 
     // Confere que tudo o que o módulo exporta compila, inclusive o que chama a SDL e o
     // ImGui (sem ligar nada, então serve para qualquer alvo).

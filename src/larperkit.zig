@@ -1,6 +1,10 @@
 //! LarperKit: a base comum dos apps (temas, desenho, animação, traduções).
 const std = @import("std");
 
+/// O C que o kit usa (SDL3, Dear ImGui, libc), traduzido: os componentes recebem tipos daqui
+/// (`*c.ImDrawList`), então o app usa este em vez de traduzir os headers de novo.
+pub const c = @import("c");
+
 /// Quem é o app (o nome e a pasta das configurações): ele preenche ao abrir.
 pub const app = @import("core/app.zig");
 
@@ -59,5 +63,9 @@ pub const lsp = @import("core/lsp.zig");
 pub const embedded = @import("core/embutido.zig");
 
 test {
-    std.testing.refAllDecls(@This());
+    // Os testes puros rodam sem a SDL e sem o ImGui: o `c` fica de fora.
+    inline for (comptime std.meta.declarations(@This())) |name| {
+        if (comptime std.mem.eql(u8, name, "c")) continue;
+        _ = &@field(@This(), name);
+    }
 }

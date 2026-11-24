@@ -18,7 +18,8 @@ for that move; larperCord's move is the reference, since most of the code came f
 | `"larpercord"` in paths (themes folder, config folder) | `lk.app.folder = "larpercord"` at startup |
 | `"needs a newer larperCord"` | `lk.app.name = "larperCord"` at startup |
 | `"larpercord-theme"` and `"larpercord"` in the theme LSP | built from `lk.app.folder` |
-| `src/c.h` | the kit's `c` module has SDL3, Dear ImGui and the libc headers it uses; an app with more C keeps its own and replaces the kit's with `addImport("c", …)` on the `larperkit` module |
+| `src/c.h` | the kit's `c` module (`lk.c`) has SDL3, Dear ImGui and the libc headers it uses. An app with more C translates only its own extra headers and takes SDL3 and ImGui types from `lk.c`, so the kit's functions accept them |
+| `third_party/imgui` and the SDL3 backends compiled by the app | the `larperkit` module compiles them and links SDL3. larperCord compiles its own ImGui (with FreeType) and links SDL3 its own way (static in releases), so it depends on the kit with `.imgui = false, .link_sdl = false` and keeps passing its ImGui include paths |
 
 ## Translations (`src/ui/i18n.zig`, `src/ui/i18n_pasta.zig`)
 
