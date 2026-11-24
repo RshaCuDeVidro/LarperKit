@@ -3,6 +3,18 @@
 Every version of LarperKit, newest first. The API still changes whenever an app needs it to:
 pin a version in your `build.zig.zon` and read the **Breaking** list before moving to the next.
 
+## 0.1.3 (2026-11-24)
+
+- **New:** transparent windows for glass themes. `lk.window.Options.transparent` (on by
+  default) creates the window with `SDL_WINDOW_TRANSPARENT`, and each frame is cleared with
+  the theme's `bg` including its alpha, premultiplied. On Linux the compositor blurs what is
+  behind (Hyprland does it on its own); on Windows the DWM shows the desktop. An opaque theme
+  (`bg` with alpha 1) looks the same as before.
+- **Fixed:** a drop shadow under a translucent card showed through it, as a light triangle in
+  the bottom corners. The pieces of the shadow that fall inside the card are drawn only when
+  the card's background is opaque.
+- **Breaking:** `fx.dropShadow` takes a new last argument, `opaco`.
+
 ## 0.1.2 (2026-11-24)
 
 - **Fixed:** building for Windows still failed in 0.1.1: the SDL3 headers were looked up under

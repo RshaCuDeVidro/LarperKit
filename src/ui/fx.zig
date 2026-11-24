@@ -285,7 +285,9 @@ fn drawVignette(ctx: *const d.Ctx, dl: *c.ImDrawList, col: Rgba, size: f32, r: R
 
 /// Sombra macia em 8 pedaços (cantos de uma textura, lados esticados), sem o
 /// miolo: em volta de um painel translúcido, o fundo não escurece por dentro.
-pub fn dropShadow(ctx: *const d.Ctx, dl: *c.ImDrawList, b: *const tfx.Box, r: Rect, radius: f32) void {
+/// `opaco`: o fundo do cartão tapa o que fica embaixo dele. Num cartão translúcido (vidro),
+/// os pedaços da sombra que caem dentro do retângulo apareceriam através dele: ficam de fora.
+pub fn dropShadow(ctx: *const d.Ctx, dl: *c.ImDrawList, b: *const tfx.Box, r: Rect, radius: f32, opaco: bool) void {
     const e = b.drop_shadow orelse return;
     const col = e.eval(ctx.th.tokenValues()).u();
     const blur = b.drop_shadow_size;
@@ -325,7 +327,7 @@ pub fn dropShadow(ctx: *const d.Ctx, dl: *c.ImDrawList, b: *const tfx.Box, r: Re
     q.put(@max(x2, r.right()), x3, y2, y3, x3, y3, -1, -1);
     q.put(x2, r.right(), @max(y2, r.bottom()), y3, x3, y3, -1, -1);
     // Entre o painel e a forma deslocada para baixo, a sombra está cheia.
-    if (y2 > r.bottom()) d.rect(dl, .{ .x = r.x, .y = r.bottom(), .w = r.w, .h = y2 - r.bottom() }, e.eval(ctx.th.tokenValues()), 0);
+    if (opaco and y2 > r.bottom()) d.rect(dl, .{ .x = r.x, .y = r.bottom(), .w = r.w, .h = y2 - r.bottom() }, e.eval(ctx.th.tokenValues()), 0);
     // Lados: só o trecho de fora; a queda vem da última coluna da textura.
     const top = @min(y1, r.y);
     if (top > y0) c.ImDrawList_AddImageEx(dl, ref, d.v(x1, y0), d.v(x2, top), d.v(1, 0), d.v(1, (top - y0) / side), col);
@@ -335,7 +337,7 @@ pub fn dropShadow(ctx: *const d.Ctx, dl: *c.ImDrawList, b: *const tfx.Box, r: Re
     c.ImDrawList_AddImageEx(dl, ref, d.v(s.right(), y1), d.v(x3, y2), d.v(blur / side, 1), d.v(0, 1), col);
     // A pontinha entre o canto arredondado do painel e o quadrado que ficou de
     // fora: sem isso, sobra uma lua clara dentro da sombra.
-    if (rad > 0.5) {
+    if (opaco and rad > 0.5) {
         const color = e.eval(ctx.th.tokenValues());
         const corners = [4][4]f32{
             .{ r.x, r.y, 1, 1 },
@@ -449,7 +451,8 @@ pub fn edges(ctx: *const d.Ctx, dl: *c.ImDrawList, b: *const tfx.Box, r: Rect, r
 /// Primitivas no próprio nó do layout.
 pub fn node(ctx: *d.Ctx, x: *const tfx.NodeFx, n: *const kdl.Node, r: Rect, key: usize) void {
     const radius = d.pnum(n, "radius", 0);
-    if (x.box) |b| dropShadow(ctx, ctx.dl, b, r, radius);
+    const opaco = if (x.bg) |e| e.eval(ctx.th.tokenValues()).a >= 0.99 else true;
+    if (x.box) |b| dropShadow(ctx, ctx.dl, b, r, radius, opaco);
     if (x.bg) |e| d.rect(ctx.dl, r, e.eval(ctx.th.tokenValues()), radius);
     if (x.box) |b| {
         fill(ctx, ctx.dl, b, r, radius, key);

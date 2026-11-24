@@ -55,6 +55,11 @@ pub const Options = struct {
     max_frames: ?u64 = null,
     /// Para os testes: sai quando a função disser.
     should_quit: ?*const fn () bool = null,
+    /// A janela deixa ver o que está atrás onde o fundo do tema tem alfa (os temas de vidro;
+    /// no Linux o compositor desfoca, no Windows o DWM mostra a área de trabalho). Ligada por
+    /// padrão: a flag só vale ao criar a janela, e o tema pode virar vidro com o app aberto.
+    /// Num tema opaco (fundo com alfa 1) não muda nada.
+    transparent: bool = true,
 };
 
 /// O que o laço guarda entre um quadro e outro (o app lê pelo `Frame`).
@@ -89,7 +94,8 @@ pub fn open(opts: Options) !Window {
         return error.SdlInit;
     }
     errdefer c.SDL_Quit();
-    const window = c.SDL_CreateWindow(opts.title.ptr, opts.width, opts.height, c.SDL_WINDOW_RESIZABLE | c.SDL_WINDOW_HIGH_PIXEL_DENSITY) orelse {
+    const flags = c.SDL_WINDOW_RESIZABLE | c.SDL_WINDOW_HIGH_PIXEL_DENSITY | (if (opts.transparent) c.SDL_WINDOW_TRANSPARENT else 0);
+    const window = c.SDL_CreateWindow(opts.title.ptr, opts.width, opts.height, flags) orelse {
         const driver: [*:0]const u8 = c.SDL_GetCurrentVideoDriver() orelse "?";
         std.log.err("janela ({s}): {s}", .{ driver, c.SDL_GetError() });
         return error.SdlWindow;
@@ -104,6 +110,8 @@ pub fn open(opts: Options) !Window {
     };
     errdefer c.SDL_DestroyRenderer(renderer);
     _ = c.SDL_SetRenderVSync(renderer, 1);
+    // A limpeza troca os pixels, alfa incluído, em vez de misturar com o que já estava lá.
+    _ = c.SDL_SetRenderDrawBlendMode(renderer, c.SDL_BLENDMODE_NONE);
     wake_type.store(c.SDL_RegisterEvents(1), .release);
 
     _ = c.ImGui_CreateContext(null);
@@ -230,8 +238,9 @@ fn frame(w: *Window, opts: Options, user: anytype, comptime draw: fn (@TypeOf(us
     c.ImGui_End();
     c.ImGui_PopStyleVar();
     c.ImGui_Render();
+    // O fundo do tema com o alfa dele, pré-multiplicado: no vidro, a janela fica translúcida.
     const bg = opts.theme.c(.bg);
-    _ = c.SDL_SetRenderDrawColorFloat(w.renderer, bg.r, bg.g, bg.b, 1);
+    _ = c.SDL_SetRenderDrawColorFloat(w.renderer, bg.r * bg.a, bg.g * bg.a, bg.b * bg.a, bg.a);
     _ = c.SDL_RenderClear(w.renderer);
     c.cImGui_ImplSDLRenderer3_RenderDrawData(c.ImGui_GetDrawData(), w.renderer);
     _ = c.SDL_RenderPresent(w.renderer);
