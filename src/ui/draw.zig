@@ -41,8 +41,9 @@ pub const Ctx = struct {
     dl: *c.ImDrawList,
     fg: *c.ImDrawList,
     io: *c.ImGuiIO,
-    /// Onde os efeitos criam texturas (fx.zig).
-    renderer: *c.SDL_Renderer,
+    /// Onde os efeitos criam texturas (fx.zig). null (os testes, sem janela): os efeitos
+    /// com textura ficam de fora.
+    renderer: ?*c.SDL_Renderer = null,
     mouse: c.ImVec2,
     now_ms: i64,
     win: Rect,

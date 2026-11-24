@@ -40,6 +40,13 @@ for that move; larperCord's move is the reference, since most of the code came f
 
 ## Before larperCord switches
 
+The kit's components must draw the same as larperCord, checked image to image: draw a page with
+the components of a real larperCord screen (Settings → Chat has switches, buttons and a slider)
+offscreen in the kit, and compare it with larperCord's QA capture of that screen, in the same
+theme and at the same scale. It can't be done yet: the kit doesn't load larperCord's fonts until
+the fonts move. larperCord's QA binary runs from a folder outside its worktree (its results go
+to the current folder), and nothing is built or written in larperCord's worktree.
+
 The test "os nomes do larperCord saem iguais" in `src/core/app.zig` must pass. With
 `lk.app.nome = "larperCord"` and `lk.app.pasta = "larpercord"`, it checks byte by byte the
 keychain entries and the folders the kit builds against the strings in larperCord `b5b3fc2`.
@@ -60,3 +67,22 @@ are `larpercord-plugin` and `larperCord/plugin/<plugin>/<key>`), its names join 
 | `-Dqa` (the `qa` build option of the app) | the app passes its own value on: `b.dependency("larperkit", .{ .qa = qa, … })`. The kit's default is the same as larperCord's (on in Debug only), but an app that changes its own must pass it, or its robot runs without the kit's marks, or a release ships with them |
 | the Inspector recording in `inspect/captura.zig` (`kind`, rectangle, QA mark, part) | unchanged: the kit's drawing calls it exactly as before, so `ctl inspect el` and the Inspector card see the same elements |
 | `third_party/fribidi` compiled by the app | compiled by the kit's module |
+
+## Components (`src/ui/componentes.zig`, `src/ui/ids.zig`)
+
+The default drawing of each component is copied line by line from larperCord; a theme with
+`parts` changes it per state. It has not been compared image to image yet (see below). The app registers the kit's parts at startup: `lk.componentes.registrar()`.
+
+| Before (larperCord) | After (LarperKit) |
+| --- | --- |
+| a number picked by hand in `d.hit(ctx, 27, r)` | `d.hit(ctx, lk.id("mic", 0), r)`: same signature (`usize`), the number comes from a name |
+| `Page` in `ui/settings.zig` (`id`, `markText`, `font`, `title`, `line`, `heading`, `note`, `divider`, `toggle`, `toggleIf`, `slider`, `select`, `radio`, `segmented`, `button`, `buttonSoft`, `sameLine`) | `lk.componentes.Page`, with `.escopo = lk.id("settings-voz", 0)` (one per page) instead of counting from 1 on every page; the toggle animation key no longer mixes in `ctx.st.settings.page` |
+| `Page.swatches`, `Page.keyRow`, `Page.keyRowEditable`, `languageRows` | stay in the app (they know the app's colors, shortcuts and languages) |
+| `noteOverflow`, `fitSize` in `ui/settings.zig` | `lk.componentes.noteOverflow`, `lk.componentes.fitSize` (the overflow counter moves with them) |
+| `inbox.button`, `inbox.buttonWidth` | `lk.componentes.button(…, .{ .kind = .pill, .danger = … })`, `buttonWidth(ctx, label, .pill)`. It now leaves the QA mark `button:<label>` unless the caller passes `.mark = ""` (or its own key) |
+| `inbox.wrapText` | `lk.componentes.wrapText` |
+| `segments` in `ui/settings_voz.zig` | `lk.componentes.segmented(…, .{ .estilo = .simples, .tag = "voz-ruido" })`; `Page.segmented` is `.estilo = .suave` (the two looks differ: animation, height, font fitting) |
+
+Still to survey: the other button and switch variants spread through larperCord (about 50),
+to tell the ones that differ on purpose (the mascot pill, the forum tag, the reminder chip stay
+in the app) from the plain copies that can use these components.

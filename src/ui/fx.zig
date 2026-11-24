@@ -125,7 +125,7 @@ fn pathKey(p: *const tpath.Path, w: u32, h: u32) u64 {
 
 /// Sobe os pixels para uma textura nova e guarda na tabela.
 fn keep(ctx: *const d.Ctx, key: u64, w: u32, h: u32, px: []const u8) ?*c.SDL_Texture {
-    const tex = c.SDL_CreateTexture(ctx.renderer, c.SDL_PIXELFORMAT_RGBA32, c.SDL_TEXTUREACCESS_STATIC, @intCast(w), @intCast(h)) orelse return null;
+    const tex = c.SDL_CreateTexture(ctx.renderer orelse return null, c.SDL_PIXELFORMAT_RGBA32, c.SDL_TEXTUREACCESS_STATIC, @intCast(w), @intCast(h)) orelse return null;
     _ = c.SDL_SetTextureBlendMode(tex, c.SDL_BLENDMODE_BLEND);
     _ = c.SDL_UpdateTexture(tex, null, px.ptr, @intCast(w * 4));
     generated +%= 1;
@@ -156,7 +156,7 @@ pub fn wrapsAnySize(ctx: *const d.Ctx) bool {
         var known: ?bool = null;
     };
     if (S.known) |k| return k;
-    const props = c.SDL_GetRendererProperties(ctx.renderer);
+    const props = c.SDL_GetRendererProperties(ctx.renderer orelse return false);
     const ok = c.SDL_GetBooleanProperty(props, c.SDL_PROP_RENDERER_TEXTURE_WRAPPING_BOOLEAN, false);
     S.known = ok;
     return ok;
@@ -476,7 +476,7 @@ pub fn motionAllowed(ctx: *const d.Ctx, n: *const kdl.Node) bool {
 }
 
 fn windowActive(ctx: *const d.Ctx) bool {
-    const win = c.SDL_GetRenderWindow(ctx.renderer) orelse return true;
+    const win = c.SDL_GetRenderWindow(ctx.renderer orelse return true) orelse return true;
     const flags = c.SDL_GetWindowFlags(win);
     return flags & (c.SDL_WINDOW_MINIMIZED | c.SDL_WINDOW_OCCLUDED) == 0;
 }

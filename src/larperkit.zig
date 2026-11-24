@@ -45,6 +45,12 @@ pub const camada = @import("ui/camada.zig");
 pub const quadro = @import("ui/quadro.zig");
 /// As contas do papel de parede (onde a imagem cai, o vidro dos painéis por cima).
 pub const wallpaper_fit = @import("ui/wallpaper_fit.zig");
+// --- Componentes ---------------------------------------------------------------------
+/// Ids por nome para os clicáveis: `lk.ids.id("salvar", 0)`.
+pub const ids = @import("ui/ids.zig");
+pub const id = ids.id;
+pub const componentes = @import("ui/componentes.zig");
+
 /// As marcas dos testes visuais, e o que o Inspetor grava de cada quadro.
 pub const qa = @import("ui/qa.zig");
 pub const captura = @import("inspect/captura.zig");

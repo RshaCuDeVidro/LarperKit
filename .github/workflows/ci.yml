@@ -13,6 +13,8 @@ jobs:
       # headers da SDL3 baixados (o Ubuntu do CI não tem a SDL3).
       - run: tools/deps.sh
       - run: zig build check -Dsdl-include=.deps/windows/include
+      # Os componentes num ImGui de verdade, sem janela.
+      - run: zig build test-ui -Dsdl-include=.deps/windows/include --summary all
 
   # Os testes saem do Linux para Windows (x86_64-windows-gnu) e rodam num Windows de verdade.
   windows-build:
@@ -24,7 +26,7 @@ jobs:
           version: 0.17.0
       - run: tools/deps.sh
       - run: zig build check -Dtarget=x86_64-windows-gnu
-      - run: zig build test-bin -Dtarget=x86_64-windows-gnu -p out
+      - run: zig build test-bin test-ui-bin -Dtarget=x86_64-windows-gnu -p out
       - uses: actions/upload-artifact@v4
         with:
           name: windows-tests
@@ -39,3 +41,4 @@ jobs:
           name: windows-tests
           path: bin
       - run: bin\larperkit-test.exe
+      - run: bin\larperkit-test-ui.exe

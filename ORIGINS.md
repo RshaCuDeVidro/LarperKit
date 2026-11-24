@@ -77,6 +77,7 @@ in both repositories.
 | `src/ui/wallpaper_fit.zig` | |
 | `src/ui/widgets.zig` | |
 | `src/inspect/captura.zig` | |
+| `src/inspect/ganchos.cpp` | the ImGui item hooks `captura.zig` reads |
 | `src/platform/apagar.zig` | |
 | `src/platform/fc_warm.zig` | |
 | `src/platform/fsutil.zig` | |

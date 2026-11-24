@@ -160,6 +160,34 @@ pub fn build(b: *std.Build) void {
     // Linux e roda num Windows de verdade).
     b.step("test-bin", "Instala o executável dos testes").dependOn(&b.addInstallArtifact(tests, .{}).step);
 
+    // Os componentes num ImGui de verdade, sem janela: o ImGui do kit compilado junto (sem
+    // FreeType: as letras do próprio ImGui bastam para medir e clicar).
+    const ui_mod = b.createModule(.{
+        .root_source_file = b.path("src/teste_ui.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    ui_mod.addImport("larperkit", mod);
+    ui_mod.addImport("c", c);
+    ui_mod.addIncludePath(b.path("third_party/imgui"));
+    ui_mod.addIncludePath(b.path("third_party/dcimgui"));
+    ui_mod.addCMacro("IMGUI_USE_WCHAR32", "1");
+    // Os ganchos de item do ImGui para o Inspetor (src/inspect/ganchos.cpp), como no app.
+    ui_mod.addCMacro("IMGUI_ENABLE_TEST_ENGINE", "1");
+    ui_mod.addCSourceFile(.{ .file = b.path("src/inspect/ganchos.cpp"), .flags = &.{ "-std=c++17", "-fno-exceptions", "-fno-rtti" } });
+    ui_mod.addCSourceFiles(.{
+        .root = b.path("third_party"),
+        .files = &.{ "imgui/imgui.cpp", "imgui/imgui_draw.cpp", "imgui/imgui_tables.cpp", "imgui/imgui_widgets.cpp", "dcimgui/dcimgui.cpp" },
+        .flags = &.{ "-std=c++17", "-fno-exceptions", "-fno-rtti" },
+    });
+    // Só os stubs: as bindings citam ShowDemoWindow.
+    ui_mod.addCSourceFile(.{ .file = b.path("third_party/imgui/imgui_demo.cpp"), .flags = &.{ "-std=c++17", "-fno-exceptions", "-fno-rtti", "-DIMGUI_DISABLE_DEMO_WINDOWS" } });
+    const ui_tests = b.addTest(.{ .name = "larperkit-test-ui", .root_module = ui_mod });
+    b.step("test-ui", "Roda os testes dos componentes num ImGui sem janela").dependOn(&b.addRunArtifact(ui_tests).step);
+    b.step("test-ui-bin", "Instala o executável dos testes dos componentes").dependOn(&b.addInstallArtifact(ui_tests, .{}).step);
+
     // Confere que tudo o que o módulo exporta compila, inclusive o que chama a SDL e o
     // ImGui (sem ligar nada, então serve para qualquer alvo).
     const check_mod = b.createModule(.{
