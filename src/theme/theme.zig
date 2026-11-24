@@ -102,6 +102,9 @@ pub const Theme = struct {
     transparent: bool = false,
     styles: std.StringHashMapUnmanaged(Style) = .empty,
     layout: ?*const kdl.Node = null,
+    /// O nome de cada nó do layout, juntado ao carregar: o app pergunta pelos componentes
+    /// dele a cada quadro (`has`) sem andar a árvore.
+    layout_names: std.StringHashMapUnmanaged(void) = .empty,
     /// Sobrescritas efetivas de cada nó (já incluindo as dos pais).
     node_colors: std.AutoHashMapUnmanaged(*const kdl.Node, []const Override) = .empty,
     /// Primitivas novas dos nós que usam alguma (`fx.zig`). Vazio na maioria.
@@ -124,6 +127,12 @@ pub const Theme = struct {
 
     pub fn deinit(t: *Theme) void {
         t.arena.deinit();
+    }
+
+    /// O layout tem um nó com esse nome em algum lugar? (Sem o painel com o botão de
+    /// configurações, o cabeçalho põe um.) Resolvido ao carregar: barato a cada quadro.
+    pub fn has(t: *const Theme, name: []const u8) bool {
+        return t.layout_names.contains(name);
     }
 
     pub fn c(t: *const Theme, tok: Token) Rgba {
@@ -150,12 +159,10 @@ pub const Theme = struct {
     }
 };
 
-/// O layout tem um nó com esse nome em algum lugar? (O app pergunta pelos componentes dele:
-/// sem o painel com o botão de configurações, o cabeçalho põe um.)
-pub fn hasNode(n: *const kdl.Node, name: []const u8) bool {
-    if (std.mem.eql(u8, n.name, name)) return true;
-    for (n.children) |*ch| if (hasNode(ch, name)) return true;
-    return false;
+/// Junta o nome de cada nó da árvore (ver `Theme.has`).
+fn collectNames(t: *Theme, a: std.mem.Allocator, n: *const kdl.Node) error{OutOfMemory}!void {
+    try t.layout_names.put(a, n.name, {});
+    for (n.children) |*ch| try collectNames(t, a, ch);
 }
 
 /// Texto secundário legível em qualquer tema, inclusive os de outras pessoas: o traço fino das
@@ -394,6 +401,7 @@ pub fn loadWith(gpa: std.mem.Allocator, src: []const u8, lo: LoadOptions, diag: 
     t.parts = try part_rules.finish(a);
     legibleText(&t);
     if (t.layout == null) return fail(diag, null, "o tema precisa de um nó `layout`");
+    try collectNames(&t, a, t.layout.?);
     try collectOverrides(&t, a, t.layout.?, &.{}, resolver, lo.mode, diag);
     collectFx(&t, a, t.layout.?, &fcx) catch |err| return fxFail(err, fcx, diag);
     t.transparent = t.transparent or t.colors.get(.bg).a < 0.999;

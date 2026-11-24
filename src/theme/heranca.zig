@@ -643,7 +643,7 @@ test "extends: um embutido, e o nome do próprio tema leva ao embutido" {
     var t = try theme.loadWith(testing.allocator, "extends \"classico\"\ncolors { accent \"#ff00aa\" }", .{ .bases = mem.bases_(), .self = "mem:classico" }, null);
     defer t.deinit();
     try eqColor(0xff00aa, t.c(.accent));
-    try testing.expect(theme.hasNode(t.layout.?, "user-panel"));
+    try testing.expect(t.has("user-panel"));
     try testing.expectEqual(@as(usize, 0), t.warnings.len);
 }
 
