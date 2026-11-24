@@ -49,6 +49,10 @@ pub const layer = @import("ui/camada.zig");
 pub const frame_stats = @import("ui/quadro.zig");
 /// As contas do papel de parede (onde a imagem cai, o vidro dos painéis por cima).
 pub const wallpaper_fit = @import("ui/wallpaper_fit.zig");
+// --- Janela -------------------------------------------------------------------------
+/// A janela e o laço que dorme quando nada muda: `lk.window.run(…)`, `lk.window.wake(…)`.
+pub const window = @import("platform/window.zig");
+
 // --- Componentes ---------------------------------------------------------------------
 /// Ids por nome para os clicáveis: `lk.ids.id("salvar", 0)`.
 pub const ids = @import("ui/ids.zig");

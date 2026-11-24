@@ -26,6 +26,9 @@ jobs:
       - run: tools/deps.sh
       - run: zig build vitrine
       - run: SDL_VIDEO_DRIVER=offscreen zig-out/bin/vitrine --out fotos --fonts .deps/fonts --lang en
+      # Um app de verdade que depende do kit pelo build.zig.zon: compila, abre sem janela,
+      # desenha 4 quadros (o relógio de outra thread acorda o laço) e sai.
+      - run: cd examples/hello && zig build && SDL_VIDEO_DRIVER=offscreen HELLO_FRAMES=4 timeout 60 zig-out/bin/hello
       - uses: actions/upload-artifact@v4
         with:
           name: vitrine
@@ -42,6 +45,7 @@ jobs:
           version: 0.17.0
       - run: zig build check -Dtarget=x86_64-windows-gnu
       - run: zig build test-bin test-ui-bin vitrine -Dtarget=x86_64-windows-gnu -p out
+      - run: cd examples/hello && zig build -Dtarget=x86_64-windows-gnu
       - uses: actions/upload-artifact@v4
         with:
           name: windows-tests

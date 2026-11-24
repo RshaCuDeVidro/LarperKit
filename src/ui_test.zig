@@ -196,3 +196,50 @@ test "ids de páginas diferentes não se cruzam" {
     b.scope = lk.ids.id("pagina", 1);
     for (0..50) |_| try testing.expect(a.id() != b.id());
 }
+
+test "o laço da janela dorme parado e acorda com wake de outra thread" {
+    // Sem janela na tela: o driver offscreen da SDL desenha na memória.
+    _ = c.SDL_SetHint(c.SDL_HINT_VIDEO_DRIVER, "offscreen");
+    comp.register();
+    var th = try lk.theme.load(testing.allocator, tema, null, null);
+    defer th.deinit();
+    const S = struct {
+        var acordou: std.atomic.Value(i32) = .init(0);
+        var sair: std.atomic.Value(bool) = .init(false);
+        var quadros: std.atomic.Value(u32) = .init(0);
+        var parado: u32 = 0;
+        fn onWake(code: i32) void {
+            _ = acordou.fetchAdd(code, .monotonic);
+        }
+        fn quit() bool {
+            return sair.load(.acquire);
+        }
+        fn draw(_: void, ctx: *d.Ctx) void {
+            _ = quadros.fetchAdd(1, .monotonic);
+            Tela.f(ctx);
+        }
+        // Espera a janela abrir e assentar (no wine leva mais de meio segundo), conta os
+        // quadros de meio segundo parado, acorda com um wake, e sai.
+        fn outra() void {
+            var n: u32 = 0;
+            while (quadros.load(.monotonic) < 3 and n < 1000) : (n += 1) c.SDL_Delay(10);
+            c.SDL_Delay(100);
+            const inicio = quadros.load(.monotonic);
+            c.SDL_Delay(500);
+            parado = quadros.load(.monotonic) - inicio;
+            lk.window.wake(5);
+            c.SDL_Delay(300);
+            sair.store(true, .release);
+            lk.window.wake(0);
+        }
+    };
+    const t = try std.Thread.spawn(.{}, S.outra, .{});
+    try lk.window.run(.{ .title = "teste", .width = 900, .height = 700, .theme = &th, .on_wake = S.onWake, .should_quit = S.quit }, {}, S.draw);
+    t.join();
+    try testing.expectEqual(@as(i32, 5), S.acordou.load(.acquire));
+    // Meio segundo parado: nenhum quadro (a 60 por segundo seriam uns 30).
+    if (S.parado > 1) {
+        std.debug.print("{d} quadros em meio segundo parado\n", .{S.parado});
+        return error.DesenhouParado;
+    }
+}

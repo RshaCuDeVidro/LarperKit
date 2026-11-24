@@ -1,0 +1,11 @@
+.{
+    .name = .hello,
+    .version = "0.1.0",
+    .fingerprint = 0x3610a6867cde9d68,
+    .minimum_zig_version = "0.17.0",
+    .dependencies = .{
+        // Num app de verdade: `zig fetch --save git+https://github.com/RshaCuDeVidro/LarperKit#<tag>`.
+        .larperkit = .{ .path = "../.." },
+    },
+    .paths = .{ "build.zig", "build.zig.zon", "main.zig" },
+}

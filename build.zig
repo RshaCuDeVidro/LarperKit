@@ -56,6 +56,16 @@ pub fn translations(b: *std.Build, kit: *std.Build, dir: []const u8) *std.Build.
     return b.createModule(.{ .root_source_file = wf.add("translations.zig", src.items) });
 }
 
+/// Instala o SDL3.dll ao lado do executável do app no Windows (a SDL3 do kit, a do MinGW, é
+/// uma DLL). Nos outros sistemas não faz nada.
+///
+///     const kit = b.dependency("larperkit", .{ .target = target, .optimize = optimize });
+///     @import("larperkit").installSdl(b, kit);
+pub fn installSdl(b: *std.Build, kit: *std.Build.Dependency) void {
+    const dll = kit.builder.named_lazy_paths.get("SDL3.dll") orelse return;
+    b.getInstallStep().dependOn(&b.addInstallBinFile(dll, "SDL3.dll").step);
+}
+
 /// GNU FriBidi (third_party/fribidi): o texto da direita para a esquerda na ordem de desenho
 /// (src/ui/bidi.zig). Os includes vão só nestes arquivos: o config.h e o common.h dele têm
 /// nomes comuns demais.
@@ -133,7 +143,7 @@ pub fn build(b: *std.Build) void {
     const with_imgui = b.option(bool, "imgui", "Compila o Dear ImGui do kit no módulo (padrão: sim)") orelse true;
     // A SDL3 ligada no módulo. Um app que liga a dele de outro jeito (estática, numa release)
     // desliga e liga a dele.
-    const link_sdl = b.option(bool, "link-sdl", "Liga a SDL3 no módulo (padrão: sim)") orelse true;
+    const link_sdl = b.option(bool, "link_sdl", "Liga a SDL3 no módulo (padrão: sim)") orelse true;
     // A SDL3 do Windows (a do MinGW): o build baixa sozinho, pelo build.zig.zon, quando o alvo
     // é Windows.
     const win_sdl: ?std.Build.LazyPath = if (windows and sdl_include == null) blk: {
