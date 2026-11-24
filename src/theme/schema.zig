@@ -498,7 +498,7 @@ pub const child_specs = [_]NodeSpec{
 };
 
 /// O nome do `part`: a parte e os estados, separados por `:`. Quais existem é de cada app
-/// (parts.zig, `registrar`).
+/// (parts.zig, `register`).
 const part_selector_desc = "The part, then its states separated by colons (\"button:hover\"). The parts and states each app has are listed in its theme docs.";
 
 /// As propriedades de `part`, com o tipo e a faixa da tabela `props` de parts.zig.
@@ -791,29 +791,29 @@ pub const components = [_]NodeSpec{
 /// O que um app (ou um módulo do kit) acrescenta ao esquema. O kit fica com os nós
 /// genéricos (`row`, `column`, `stack`, `label`, `shape`, os fundos…); cada app registra
 /// os componentes que os temas dele podem pôr no layout e as partes de dentro deles.
-pub const Extensao = struct {
-    componentes: []const NodeSpec = &.{},
+pub const Extension = struct {
+    components: []const NodeSpec = &.{},
     /// Filhos dos componentes do app (como `span` dentro de `label`, com `parent`).
-    filhos: []const NodeSpec = &.{},
+    children: []const NodeSpec = &.{},
     /// As partes, com os estados (parts.zig).
-    partes: ?*const parts.Conjunto = null,
+    parts: ?*const parts.Definition = null,
     /// Os valores de `theme … preview=`: as miniaturas das Configurações do app.
     previews: []const []const u8 = &.{},
 };
 
-var extensoes: [8]*const Extensao = undefined;
+var extensoes: [8]*const Extension = undefined;
 var n_extensoes: usize = 0;
 var preview_buf: [32][]const u8 = undefined;
 var n_previews: usize = 0;
 
 /// Junta uma extensão ao esquema (uma vez basta; repetir não faz nada). Só na thread da
 /// interface, antes de carregar temas.
-pub fn registrar(e: *const Extensao) void {
-    for (registradas()) |old| if (old == e) return;
+pub fn register(e: *const Extension) void {
+    for (registered()) |old| if (old == e) return;
     std.debug.assert(n_extensoes < extensoes.len);
     extensoes[n_extensoes] = e;
     n_extensoes += 1;
-    if (e.partes) |p| parts.registrar(p);
+    if (e.parts) |p| parts.register(p);
     for (e.previews) |pv| {
         for (previews()) |old| {
             if (std.mem.eql(u8, old, pv)) break;
@@ -824,7 +824,7 @@ pub fn registrar(e: *const Extensao) void {
     }
 }
 
-pub fn registradas() []const *const Extensao {
+pub fn registered() []const *const Extension {
     return extensoes[0..n_extensoes];
 }
 
@@ -839,13 +839,13 @@ pub fn valuesOf(p: *const Prop) []const []const u8 {
 }
 
 /// Os componentes do kit e os de cada app, um por vez.
-pub const Componentes = struct {
+pub const ComponentIter = struct {
     ext: usize = 0,
     i: usize = 0,
 
-    pub fn next(it: *Componentes) ?*const NodeSpec {
+    pub fn next(it: *ComponentIter) ?*const NodeSpec {
         while (true) {
-            const list: []const NodeSpec = if (it.ext == 0) &components else if (it.ext <= n_extensoes) extensoes[it.ext - 1].componentes else return null;
+            const list: []const NodeSpec = if (it.ext == 0) &components else if (it.ext <= n_extensoes) extensoes[it.ext - 1].components else return null;
             if (it.i < list.len) {
                 it.i += 1;
                 return &list[it.i - 1];
@@ -856,7 +856,7 @@ pub const Componentes = struct {
     }
 };
 
-pub fn componentes() Componentes {
+pub fn allComponents() ComponentIter {
     return .{};
 }
 
@@ -874,7 +874,7 @@ pub fn topSpec(name: []const u8) ?*const NodeSpec {
 /// Contêiner ou componente.
 pub fn layoutSpec(name: []const u8) ?*const NodeSpec {
     if (findIn(&containers, name)) |s| return s;
-    var it = componentes();
+    var it = allComponents();
     while (it.next()) |s| if (std.mem.eql(u8, s.name, name)) return s;
     return null;
 }
@@ -886,7 +886,7 @@ pub fn isContainer(name: []const u8) bool {
 /// O filho `name` dentro do bloco `parent` (`style` em `styles`).
 pub fn childSpec(parent: []const u8, name: []const u8) ?*const NodeSpec {
     for (&child_specs) |*s| if (std.mem.eql(u8, s.parent, parent) and std.mem.eql(u8, s.name, name)) return s;
-    for (registradas()) |e| for (e.filhos) |*s| if (std.mem.eql(u8, s.parent, parent) and std.mem.eql(u8, s.name, name)) return s;
+    for (registered()) |e| for (e.children) |*s| if (std.mem.eql(u8, s.parent, parent) and std.mem.eql(u8, s.name, name)) return s;
     return null;
 }
 
@@ -907,7 +907,7 @@ pub fn patternToken(key: []const u8) ?[]const u8 {
 pub fn knowsKey(key: []const u8) bool {
     const lists = [_][]const NodeSpec{ &top, &child_specs, &containers, &components };
     for (lists) |list| for (list) |*s| if (findProp(s, key) != null) return true;
-    for (registradas()) |e| for ([_][]const NodeSpec{ e.componentes, e.filhos }) |list| for (list) |*s| if (findProp(s, key) != null) return true;
+    for (registered()) |e| for ([_][]const NodeSpec{ e.components, e.children }) |list| for (list) |*s| if (findProp(s, key) != null) return true;
     return false;
 }
 
@@ -1050,7 +1050,7 @@ pub const Checker = struct {
         const spec = layoutSpec(n.name) orelse {
             var names: std.ArrayList([]const u8) = .empty;
             for (containers) |s| try names.append(ck.a, s.name);
-            var it = componentes();
+            var it = allComponents();
             while (it.next()) |s| try names.append(ck.a, s.name);
             if (suggest(n.name, names.items)) |s|
                 return ck.issue(n.line, n.col, "unknown component '{s}' (did you mean '{s}'?)", .{ n.name, s });
@@ -1213,10 +1213,10 @@ pub fn writeJson(gpa: std.mem.Allocator, out: *std.ArrayList(u8)) !void {
     var children: std.ArrayList(*const NodeSpec) = .empty;
     defer children.deinit(gpa);
     for (&child_specs) |*spec| try children.append(gpa, spec);
-    for (registradas()) |e| for (e.filhos) |*spec| try children.append(gpa, spec);
+    for (registered()) |e| for (e.children) |*spec| try children.append(gpa, spec);
     var comps: std.ArrayList(*const NodeSpec) = .empty;
     defer comps.deinit(gpa);
-    var it = componentes();
+    var it = allComponents();
     while (it.next()) |spec| try comps.append(gpa, spec);
     var tops: [top.len]*const NodeSpec = undefined;
     for (&top, &tops) |*spec, *o| o.* = spec;
@@ -1342,7 +1342,7 @@ const J = struct {
 
 const testing = std.testing;
 /// Os componentes e as partes do larperCord, registrados como um app faria.
-const cord = @import("exemplo_cord.zig");
+const cord = @import("example_cord.zig");
 
 test "tokens saem do enum, com descrição" {
     try testing.expectEqual(token_count, token_names.len);
@@ -1353,7 +1353,7 @@ test "tokens saem do enum, com descrição" {
 }
 
 test "nomes únicos e propriedades sem repetir dentro de cada nó" {
-    const lists = [_][]const NodeSpec{ &top, &child_specs, &containers, &components ++ cord.componentes };
+    const lists = [_][]const NodeSpec{ &top, &child_specs, &containers, &components ++ cord.components };
     for (lists) |list| for (list, 0..) |*s, i| {
         for (list[i + 1 ..]) |*o| try testing.expect(!std.mem.eql(u8, s.name, o.name) or !std.mem.eql(u8, s.parent, o.parent));
         // Uma propriedade do próprio nó pode detalhar a de um grupo (`radius` do `shape`:
@@ -1402,7 +1402,7 @@ test "checagem: componente, propriedade e valor desconhecidos, com linha e colun
     defer arena.deinit();
     const a = arena.allocator();
     var out: std.ArrayList(Issue) = .empty;
-    cord.registrar();
+    cord.register();
     try checkSrc(
         \\theme "x" preview=nada
         \\fonts size=200
@@ -1441,7 +1441,7 @@ test "checagem estrita vira erro; tema certo não tem nada" {
     defer arena.deinit();
     const a = arena.allocator();
     var out: std.ArrayList(Issue) = .empty;
-    cord.registrar();
+    cord.register();
     try checkSrc("layout { messages tamanho=3 }", true, &out, a);
     try testing.expectEqual(@as(usize, 1), out.items.len);
     try testing.expectEqual(Severity.@"error", out.items[0].severity);
@@ -1456,8 +1456,8 @@ test "checagem estrita vira erro; tema certo não tem nada" {
 }
 
 test "os componentes com cor são os de fx.zig, e as cores deles são as que fx.zig guarda" {
-    cord.registrar();
-    var it = componentes();
+    cord.register();
+    var it = allComponents();
     while (it.next()) |s| {
         if (s.paints != fx.painted.has(s.name)) {
             std.debug.print("{s}: paints={} no esquema, {} em fx.zig\n", .{ s.name, s.paints, fx.painted.has(s.name) });
@@ -1491,7 +1491,7 @@ test "parts: as partes, os estados e as propriedades de parts.zig" {
     defer arena.deinit();
     const a = arena.allocator();
     var out: std.ArrayList(Issue) = .empty;
-    cord.registrar();
+    cord.register();
     try checkSrc(
         \\parts mode=dark {
         \\    part "message:hover" bg="@hover" radius=6 bar=accent
@@ -1516,13 +1516,13 @@ test "parts: as partes, os estados e as propriedades de parts.zig" {
 test "o JSON abre e tem os componentes" {
     var out: std.ArrayList(u8) = .empty;
     defer out.deinit(testing.allocator);
-    cord.registrar();
+    cord.register();
     try writeJson(testing.allocator, &out);
     var parsed = try std.json.parseFromSlice(std.json.Value, testing.allocator, out.items, .{});
     defer parsed.deinit();
     const comps = parsed.value.object.get("components").?.array.items;
     // Os do kit primeiro, depois os do app registrado.
-    try testing.expectEqual(components.len + cord.componentes.len, comps.len);
+    try testing.expectEqual(components.len + cord.components.len, comps.len);
     try testing.expectEqualStrings("label", comps[0].object.get("name").?.string);
     try testing.expectEqualStrings("guild-bar", comps[components.len].object.get("name").?.string);
     try testing.expectEqual(cord.previews.len, parsed.value.object.get("previews").?.array.items.len);

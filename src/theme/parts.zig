@@ -8,12 +8,12 @@
 //!     }
 //!
 //! Quais partes existem é de cada app (e de cada componente do kit): cada um monta um
-//! conjunto com `Partes` (as partes, os estados que valem em cada uma e as propriedades,
-//! com uma linha em inglês) e registra com `registrar` (ou `schema.registrar`). A tabela
+//! conjunto com `PartSet` (as partes, os estados que valem em cada uma e as propriedades,
+//! com uma linha em inglês) e registra com `register` (ou `schema.register`). A tabela
 //! `props` abaixo é a mesma para todos.
 //!
 //! Tudo é resolvido ao carregar o tema: para cada parte e cada combinação de estados, a
-//! cascata vira um `Look` numa tabela, e quem desenha só indexa (`Partes(…).get`), sem
+//! cascata vira um `Look` numa tabela, e quem desenha só indexa (`PartSet(…).get`), sem
 //! comparar nome nem alocar. As cores são expressões guardadas (`color.Expr`), avaliadas
 //! no quadro com os tokens do momento, como as de `fx.zig`: seguem a cor de destaque
 //! escolhida, a do servidor e o `c-…` do pedaço do layout. Tema sem `parts` não tem
@@ -54,17 +54,17 @@ pub const props = [_]PropSpec{
 /// a documentação ler a lista).
 pub const PartSpec = struct { name: []const u8, states: []const u8, props: []const u8, desc: []const u8 };
 
-/// As partes de um app, com os estados delas: o que `registrar` recebe. Montado em tempo
-/// de compilação por `Partes`, que confere a tabela.
-pub const Conjunto = struct {
-    estados: []const StateSpec,
-    partes: []const PartSpec,
+/// As partes de um app, com os estados delas: o que `register` recebe. Montado em tempo
+/// de compilação por `PartSet`, que confere a tabela.
+pub const Definition = struct {
+    state_specs: []const StateSpec,
+    part_specs: []const PartSpec,
     /// Os estados e as propriedades de cada parte, como bits (lidos das strings da tabela).
     valid_states: []const u8,
     valid_props: []const u16,
 
-    fn stateIndex(c: *const Conjunto, name: []const u8) ?u3 {
-        for (c.estados, 0..) |s, i| if (std.mem.eql(u8, s.name, name)) return @intCast(i);
+    fn stateIndex(c: *const Definition, name: []const u8) ?u3 {
+        for (c.state_specs, 0..) |s, i| if (std.mem.eql(u8, s.name, name)) return @intCast(i);
         return null;
     }
 
@@ -73,16 +73,16 @@ pub const Conjunto = struct {
         return null;
     }
 
-    fn partIndex(c: *const Conjunto, name: []const u8) ?u16 {
-        for (c.partes, 0..) |p, i| if (std.mem.eql(u8, p.name, name)) return @intCast(i);
+    fn partIndex(c: *const Definition, name: []const u8) ?u16 {
+        for (c.part_specs, 0..) |p, i| if (std.mem.eql(u8, p.name, name)) return @intCast(i);
         return null;
     }
 
-    fn hasState(c: *const Conjunto, p: usize, s: u3) bool {
+    fn hasState(c: *const Definition, p: usize, s: u3) bool {
         return c.valid_states[p] & (@as(u8, 1) << s) != 0;
     }
 
-    fn hasProp(c: *const Conjunto, p: usize, pr: Prop) bool {
+    fn hasProp(c: *const Definition, p: usize, pr: Prop) bool {
         return c.valid_props[p] & (@as(u16, 1) << @intFromEnum(pr)) != 0;
     }
 };
@@ -90,26 +90,26 @@ pub const Conjunto = struct {
 /// O conjunto de um app com os tipos dele: `Part` é um enum com uma entrada por parte, na
 /// ordem de `partes` (`channel.voice-member` é `channel_voice_member`), e `States` um
 /// `packed struct(u8)` com um bool por estado, na ordem de `estados`. O app registra
-/// `&conjunto` e desenha com `get`.
-pub fn Partes(comptime TPart: type, comptime TStates: type, comptime estados: []const StateSpec, comptime partes: []const PartSpec) type {
+/// `&definition` e desenha com `get`.
+pub fn PartSet(comptime TPart: type, comptime TStates: type, comptime state_specs: []const StateSpec, comptime part_specs: []const PartSpec) type {
     comptime {
-        std.debug.assert(estados.len <= 8);
-        std.debug.assert(@typeInfo(TPart).@"enum".field_names.len == partes.len);
+        std.debug.assert(state_specs.len <= 8);
+        std.debug.assert(@typeInfo(TPart).@"enum".field_names.len == part_specs.len);
         std.debug.assert(@bitSizeOf(TStates) == 8);
-        for (partes, 0..) |p, i| std.debug.assert(sameName(p.name, @tagName(@as(TPart, @enumFromInt(i)))));
-        for (estados, 0..) |s, i| std.debug.assert(std.mem.eql(u8, s.name, @typeInfo(TStates).@"struct".field_names[i]));
+        for (part_specs, 0..) |p, i| std.debug.assert(sameName(p.name, @tagName(@as(TPart, @enumFromInt(i)))));
+        for (state_specs, 0..) |s, i| std.debug.assert(std.mem.eql(u8, s.name, @typeInfo(TStates).@"struct".field_names[i]));
     }
     return struct {
         pub const Part = TPart;
         pub const States = TStates;
 
-        const valid_states: [partes.len]u8 = blk: {
+        const valid_states: [part_specs.len]u8 = blk: {
             @setEvalBranchQuota(20_000);
-            var out: [partes.len]u8 = @splat(0);
-            for (partes, 0..) |p, i| {
+            var out: [part_specs.len]u8 = @splat(0);
+            for (part_specs, 0..) |p, i| {
                 var it = std.mem.tokenizeScalar(u8, p.states, ' ');
                 next: while (it.next()) |s| {
-                    for (estados, 0..) |e, k| if (std.mem.eql(u8, e.name, s)) {
+                    for (state_specs, 0..) |e, k| if (std.mem.eql(u8, e.name, s)) {
                         out[i] |= @as(u8, 1) << k;
                         continue :next;
                     };
@@ -119,31 +119,31 @@ pub fn Partes(comptime TPart: type, comptime TStates: type, comptime estados: []
             break :blk out;
         };
 
-        const valid_props: [partes.len]u16 = blk: {
+        const valid_props: [part_specs.len]u16 = blk: {
             @setEvalBranchQuota(20_000);
-            var out: [partes.len]u16 = @splat(0);
-            for (partes, 0..) |p, i| {
+            var out: [part_specs.len]u16 = @splat(0);
+            for (part_specs, 0..) |p, i| {
                 var it = std.mem.tokenizeScalar(u8, p.props, ' ');
-                while (it.next()) |s| out[i] |= @as(u16, 1) << @intFromEnum(Conjunto.propIndex(s) orelse @compileError("propriedade desconhecida na tabela: " ++ s));
+                while (it.next()) |s| out[i] |= @as(u16, 1) << @intFromEnum(Definition.propIndex(s) orelse @compileError("propriedade desconhecida na tabela: " ++ s));
             }
             break :blk out;
         };
 
-        pub const conjunto: Conjunto = .{ .estados = estados, .partes = partes, .valid_states = &valid_states, .valid_props = &valid_props };
+        pub const definition: Definition = .{ .state_specs = state_specs, .part_specs = part_specs, .valid_states = &valid_states, .valid_props = &valid_props };
 
         /// Como a parte fica nessa combinação de estados, no tema `t` (`theme.parts`).
         pub fn get(t: ?*const Table, p: TPart, s: TStates) *const Look {
             const tb = t orelse return &none;
-            const index = tb.indexOf(&conjunto) orelse return &none;
+            const index = tb.indexOf(&definition) orelse return &none;
             return &tb.looks[index[@intFromEnum(p)][@as(u8, @bitCast(s))]];
         }
 
         pub fn hasState(p: TPart, s: std.meta.FieldEnum(TStates)) bool {
-            return conjunto.hasState(@intFromEnum(p), @intCast(@intFromEnum(s)));
+            return definition.hasState(@intFromEnum(p), @intCast(@intFromEnum(s)));
         }
 
         pub fn hasProp(p: TPart, pr: Prop) bool {
-            return conjunto.hasProp(@intFromEnum(p), pr);
+            return definition.hasProp(@intFromEnum(p), pr);
         }
     };
 }
@@ -160,25 +160,25 @@ fn sameName(name: []const u8, tag: []const u8) bool {
 
 // --- Registro ---------------------------------------------------------------------------
 
-var registrados: [8]*const Conjunto = undefined;
+var registrados: [8]*const Definition = undefined;
 var n_registrados: usize = 0;
 
 /// Junta um conjunto aos que os temas entendem (uma vez basta; repetir não faz nada). Só
 /// na thread da interface, antes de carregar temas: os temas já carregados não veem o novo.
-pub fn registrar(c: *const Conjunto) void {
-    for (conjuntos()) |old| if (old == c) return;
+pub fn register(c: *const Definition) void {
+    for (definitions()) |old| if (old == c) return;
     std.debug.assert(n_registrados < registrados.len);
     registrados[n_registrados] = c;
     n_registrados += 1;
 }
 
-pub fn conjuntos() []const *const Conjunto {
+pub fn definitions() []const *const Definition {
     return registrados[0..n_registrados];
 }
 
 /// A parte com esse nome, em algum conjunto registrado.
 fn find(name: []const u8) ?struct { set: u8, part: u16 } {
-    for (conjuntos(), 0..) |c, i| if (c.partIndex(name)) |p| return .{ .set = @intCast(i), .part = p };
+    for (definitions(), 0..) |c, i| if (c.partIndex(name)) |p| return .{ .set = @intCast(i), .part = p };
     return null;
 }
 
@@ -210,10 +210,10 @@ pub const Table = struct {
     /// `looks[0]` é `none`.
     looks: []const Look,
 
-    pub const SetIndex = struct { conjunto: *const Conjunto, index: []const [256]u16 };
+    pub const SetIndex = struct { definition: *const Definition, index: []const [256]u16 };
 
-    fn indexOf(t: *const Table, c: *const Conjunto) ?[]const [256]u16 {
-        for (t.sets) |s| if (s.conjunto == c) return s.index;
+    fn indexOf(t: *const Table, c: *const Definition) ?[]const [256]u16 {
+        for (t.sets) |s| if (s.definition == c) return s.index;
         return null;
     }
 };
@@ -293,7 +293,7 @@ pub const Builder = struct {
             const sel = (n.arg(0) orelse return fail(cx, n, "part sem nome (part \"message:hover\" …)")).asString() orelse return fail(cx, n, "o nome da parte deve ser uma string");
             var it = std.mem.splitScalar(u8, sel, ':');
             const found = find(it.first()) orelse return fail(cx, n, "parte desconhecida (a lista está na documentação dos temas do app, \"Parts and states\")");
-            const conj = conjuntos()[found.set];
+            const conj = definitions()[found.set];
             var mask: u8 = 0;
             while (it.next()) |s| {
                 const i = conj.stateIndex(s) orelse return fail(cx, n, "estado desconhecido (os estados de cada parte estão na documentação dos temas do app)");
@@ -302,7 +302,7 @@ pub const Builder = struct {
             }
             var set: Set = .{};
             for (n.props) |p| {
-                const pr = Conjunto.propIndex(p.key) orelse return fail(cx, n, "propriedade desconhecida numa parte");
+                const pr = Definition.propIndex(p.key) orelse return fail(cx, n, "propriedade desconhecida numa parte");
                 if (!conj.hasProp(found.part, pr)) return fail(cx, n, "essa propriedade não existe nessa parte (a lista está na documentação dos temas do app)");
                 const spec = props[@intFromEnum(pr)];
                 const msg = bad_value[@intFromEnum(pr)];
@@ -345,10 +345,10 @@ pub const Builder = struct {
         std.mem.sort(Rule, b.rules.items, {}, Rule.before);
         var looks: std.ArrayList(Look) = .empty;
         try looks.append(a, none);
-        const regs = conjuntos();
+        const regs = definitions();
         const sets = try a.alloc(Table.SetIndex, regs.len);
         for (regs, sets, 0..) |conj, *out, si| {
-            const index = try a.alloc([256]u16, conj.partes.len);
+            const index = try a.alloc([256]u16, conj.part_specs.len);
             for (index, 0..) |*row, pi| {
                 const valid = conj.valid_states[pi];
                 for (0..256) |m| {
@@ -363,7 +363,7 @@ pub const Builder = struct {
                 // As combinações com estados que a parte não tem: como sem eles.
                 for (0..256) |m| row[m] = row[m & valid];
             }
-            out.* = .{ .conjunto = conj, .index = index };
+            out.* = .{ .definition = conj, .index = index };
         }
         const t = try a.create(Table);
         t.* = .{ .sets = sets, .looks = try looks.toOwnedSlice(a) };
@@ -383,11 +383,11 @@ pub const Builder = struct {
 const testing = std.testing;
 const theme = @import("theme.zig");
 /// As partes do larperCord, registradas como um app faria.
-const cord = @import("exemplo_cord.zig");
-const P = cord.Partes;
+const cord = @import("example_cord.zig");
+const P = cord.Parts;
 
 fn loadSrc(src: []const u8, d: ?*theme.Diagnostic) !theme.Theme {
-    cord.registrar();
+    cord.register();
     return theme.load(testing.allocator, src, null, d);
 }
 
@@ -539,7 +539,7 @@ test "modo e opção valem para o bloco" {
         \\parts when=realce { part "message:mention" bar="#ff0000" }
         \\layout { messages }
     ;
-    cord.registrar();
+    cord.register();
     var dark = try theme.loadWith(testing.allocator, src, .{ .mode = .dark }, null);
     defer dark.deinit();
     try testing.expect(dark.parts == null);
@@ -550,8 +550,8 @@ test "modo e opção valem para o bloco" {
 }
 
 test "sem parts, nada muda: os temas embutidos não têm tabela" {
-    cord.registrar();
-    for (cord.temas) |b| for ([_]theme.Mode{ .dark, .light }) |mode| {
+    cord.register();
+    for (cord.themes) |b| for ([_]theme.Mode{ .dark, .light }) |mode| {
         var t = try theme.loadWith(testing.allocator, b.source, .{ .mode = mode }, null);
         defer t.deinit();
         try testing.expect(t.parts == null);
@@ -565,8 +565,8 @@ test "sem parts, nada muda: os temas embutidos não têm tabela" {
 
 test "a tabela declarativa é coerente" {
     // Toda parte tem ao menos uma propriedade, e os estados de cada uma existem.
-    for (cord.partes, 0..) |p, i| {
-        try testing.expect(P.conjunto.valid_props[i] != 0);
+    for (cord.part_specs, 0..) |p, i| {
+        try testing.expect(P.definition.valid_props[i] != 0);
         try testing.expect(p.desc.len > 0);
     }
     try testing.expect(P.hasState(.channel_item, .selected));

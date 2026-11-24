@@ -51,10 +51,10 @@ Como está hoje. Vai mudar conforme os apps passarem para o kit.
 
 ```zig
 const lk = @import("larperkit");
-const comp = lk.componentes;
+const comp = lk.components;
 
 fn settingsPage(ctx: *lk.draw.Ctx, s: *Settings) void {
-    var p: comp.Page = .{ .ctx = ctx, .dl = ctx.dl, .x = 40, .y = 40, .w = 480, .escopo = lk.id("settings", 0) };
+    var p: comp.Page = .{ .ctx = ctx, .dl = ctx.dl, .x = 40, .y = 40, .w = 480, .scope = lk.id("settings", 0) };
     p.title("Chat");
     p.toggle("Compact mode", "", &s.compact);
     p.slider("Text size", &s.text_size, 0.8, 1.4, "{d:.0}%", 100);

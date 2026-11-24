@@ -559,10 +559,10 @@ fn lightDefaults(pal: *const [16]Rgba) std.EnumArray(Token, Rgba) {
 }
 
 /// Os componentes, as partes e os temas do larperCord, registrados como um app faria.
-const cord = @import("exemplo_cord.zig");
+const cord = @import("example_cord.zig");
 
 test "modo claro, opções e cores por modo" {
-    cord.registrar();
+    cord.register();
     const src =
         \\options { option "brilho" label="Brilho" default=#false }
         \\colors { accent "#ff0000" }
@@ -588,7 +588,7 @@ test "modo claro, opções e cores por modo" {
 }
 
 test "carrega tema com tokens, estilos e layout" {
-    cord.registrar();
+    cord.register();
     const src =
         \\theme "teste" description="só um teste"
         \\palette "#000000" "#ff0000"
@@ -611,14 +611,14 @@ test "carrega tema com tokens, estilos e layout" {
 }
 
 test "erro de tema aponta a linha" {
-    cord.registrar();
+    cord.register();
     var d: Diagnostic = .{};
     try std.testing.expectError(error.InvalidTheme, load(std.testing.allocator, "colors {\n  nao-existe \"#fff\"\n}\nlayout { messages }", null, &d));
     try std.testing.expectEqual(@as(u32, 2), d.line);
 }
 
 test "o que o esquema não conhece vira aviso, e o tema carrega assim mesmo" {
-    cord.registrar();
+    cord.register();
     var r: schema.Report = .{ .gpa = std.testing.allocator };
     defer r.deinit();
     var t = try loadWith(std.testing.allocator, "layout {\n  row {\n    messages tamanho=3\n    coisa\n  }\n}", .{ .report = &r }, null);
@@ -633,7 +633,7 @@ test "o que o esquema não conhece vira aviso, e o tema carrega assim mesmo" {
 }
 
 test "cores sobrescritas valem para os filhos" {
-    cord.registrar();
+    cord.register();
     var t = try load(std.testing.allocator,
         \\layout { column c-text="#ff0000" { messages; row c-muted="#00ff00" { composer } } }
     , null, null);
@@ -685,7 +685,7 @@ test "primitivas novas: estilo, nó e erro com a linha" {
 }
 
 test "modo vale como condição" {
-    cord.registrar();
+    cord.register();
     var t = try loadWith(std.testing.allocator, "layout { messages }", .{ .mode = .light }, null);
     defer t.deinit();
     try std.testing.expect(t.option("modo-claro").?);

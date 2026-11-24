@@ -20,7 +20,7 @@ change animates and then stops: when nothing moves, nothing asks for a frame.
 
 ## A settings page
 
-The form page (`lk.componentes.Page`): headings, switches with a description, a disabled switch, a
+The form page (`lk.components.Page`): headings, switches with a description, a disabled switch, a
 slider, buttons side by side, a segmented control, a select and radio buttons. Each one leaves a mark
 for the visual tests and gets its id from a name.
 

@@ -1,5 +1,5 @@
 //! Exemplo de registro: os componentes, as partes e as miniaturas do larperCord, do jeito
-//! que um app registra os seus (`registrar`), com dois temas dele (exemplo_cord/). Os
+//! que um app registra os seus (`register`), com dois temas dele (example_cord/). Os
 //! testes do kit usam isto para conferir o motor com os temas de um app de verdade.
 //! Tirado de src/theme/schema.zig e src/theme/parts.zig do larperCord.
 const std = @import("std");
@@ -14,7 +14,7 @@ const of = schema.of;
 const fieldNames = schema.fieldNames;
 const layout_sets = schema.layout_sets;
 
-pub const componentes = [_]schema.NodeSpec{
+pub const components = [_]schema.NodeSpec{
     .{
         .name = "guild-bar",
         .role = .component,
@@ -158,7 +158,7 @@ pub const States = packed struct(u8) {
     speaking: bool = false,
 };
 
-pub const estados = [_]parts.StateSpec{
+pub const state_specs = [_]parts.StateSpec{
     .{ .name = "self", .desc = "your own message, or your own row in a list" },
     .{ .name = "muted", .desc = "a channel you muted (or can't open)" },
     .{ .name = "offline", .desc = "a member who is offline" },
@@ -187,7 +187,7 @@ pub const Part = enum(u4) {
     composer_placeholder,
 };
 
-pub const partes = [_]parts.PartSpec{
+pub const part_specs = [_]parts.PartSpec{
     .{ .name = "message", .states = "self hover mention", .props = "bg border border-width radius bar bar-width opacity", .desc = "a whole message row, behind the avatar, the name and the text" },
     .{ .name = "message.author", .states = "self hover mention", .props = "color weight", .desc = "the author's name (the nick column in irc)" },
     .{ .name = "message.time", .states = "self hover mention", .props = "color", .desc = "the time of the message" },
@@ -205,21 +205,21 @@ pub const partes = [_]parts.PartSpec{
     .{ .name = "composer.placeholder", .states = "", .props = "color weight", .desc = "the hint in the empty message box" },
 };
 
-pub const Partes = parts.Partes(Part, States, &estados, &partes);
+pub const Parts = parts.PartSet(Part, States, &state_specs, &part_specs);
 
 /// As miniaturas das Configurações do larperCord (`theme … preview=`).
 pub const previews = [_][]const u8{ "classic", "glass", "terminal", "bubbles", "zen", "mirror", "office", "desktop" };
 
-pub const extensao: schema.Extensao = .{ .componentes = &componentes, .partes = &Partes.conjunto, .previews = &previews };
+pub const extension: schema.Extension = .{ .components = &components, .parts = &Parts.definition, .previews = &previews };
 
-pub const temas = [_]bases.Builtin{
-    .{ .name = "classico", .source = @embedFile("exemplo_cord/classico.kdl") },
-    .{ .name = "zen", .source = @embedFile("exemplo_cord/zen.kdl") },
+pub const themes = [_]bases.Builtin{
+    .{ .name = "classico", .source = @embedFile("example_cord/classico.kdl") },
+    .{ .name = "zen", .source = @embedFile("example_cord/zen.kdl") },
 };
 
 /// O que o larperCord faz ao abrir: registra os componentes e as partes e passa os temas
 /// embutidos.
-pub fn registrar() void {
-    schema.registrar(&extensao);
-    bases.embutidos = &temas;
+pub fn register() void {
+    schema.register(&extension);
+    bases.builtins = &themes;
 }

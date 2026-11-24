@@ -10,10 +10,10 @@ const Base = heranca.Base;
 pub const Builtin = struct { name: []const u8, source: []const u8 };
 
 /// Os temas embutidos do app (ele passa os dele ao abrir, antes de carregar temas).
-pub var embutidos: []const Builtin = &.{};
+pub var builtins: []const Builtin = &.{};
 
 /// Só os embutidos.
-pub const builtin: heranca.Bases = .{ .ctx = @ptrCast(&embutidos), .find = findBuiltin };
+pub const builtin: heranca.Bases = .{ .ctx = @ptrCast(&builtins), .find = findBuiltin };
 
 fn findBuiltin(_: *const anyopaque, a: std.mem.Allocator, name: []const u8, i: usize) ?Base {
     return if (i == 0) builtinBase(a, name) else null;
@@ -25,7 +25,7 @@ pub fn builtinId(buf: []u8, name: []const u8) []const u8 {
 }
 
 pub fn builtinBase(a: std.mem.Allocator, name: []const u8) ?Base {
-    for (embutidos) |b| if (std.mem.eql(u8, b.name, name)) return .{
+    for (builtins) |b| if (std.mem.eql(u8, b.name, name)) return .{
         .src = b.source,
         .id = std.fmt.allocPrint(a, "builtin:{s}", .{name}) catch return null,
         .label = std.fmt.allocPrint(a, "{s}.kdl (built-in)", .{name}) catch return null,

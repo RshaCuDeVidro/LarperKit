@@ -4,7 +4,7 @@ const std = @import("std");
 const lk = @import("larperkit");
 const c = @import("c");
 const d = lk.draw;
-const comp = lk.componentes;
+const comp = lk.components;
 const testing = std.testing;
 
 const Harness = struct {
@@ -14,7 +14,7 @@ const Harness = struct {
     pressed: bool = false,
 
     fn init(theme_src: []const u8) !Harness {
-        comp.registrar();
+        comp.register();
         _ = c.ImGui_CreateContext(null);
         const io = c.ImGui_GetIO();
         io.*.DisplaySize = .{ .x = 900, .y = 700 };
@@ -91,8 +91,8 @@ const Tela = struct {
         _ = comp.toggle(ctx, dl, lk.ids.id("som", 0), .{ .x = 20, .y = 80, .w = 40, .h = 24 }, &som, .{ .label = "Som" });
         _ = comp.slider(ctx, dl, lk.ids.id("volume", 0), .{ .x = 100, .y = 88, .w = 200, .h = 8 }, &volume, 0, 1, .{ .label = "Volume" });
         if (comp.segmented(ctx, dl, lk.ids.id("modo", 0), .{ .x = 20, .y = 130, .w = 400, .h = 44 }, &.{ "A", "B", "C" }, modo, .{})) |i| modo = i;
-        _ = comp.segmented(ctx, dl, lk.ids.id("ruido", 0), .{ .x = 20, .y = 190, .w = 400, .h = 42 }, &.{ "Desligado", "Ligado" }, 0, .{ .estilo = .simples, .tag = "ruido" });
-        var p: comp.Page = .{ .ctx = ctx, .dl = dl, .x = 460, .y = 20, .w = 400, .escopo = lk.ids.id("pagina", 0) };
+        _ = comp.segmented(ctx, dl, lk.ids.id("ruido", 0), .{ .x = 20, .y = 190, .w = 400, .h = 42 }, &.{ "Desligado", "Ligado" }, 0, .{ .style = .plain, .tag = "ruido" });
+        var p: comp.Page = .{ .ctx = ctx, .dl = dl, .x = 460, .y = 20, .w = 400, .scope = lk.ids.id("pagina", 0) };
         p.title("Página");
         p.toggle("Avisos", "Mostra um aviso quando algo muda.", &pg_toggle);
         p.slider("Brilho", &pg_slider, 0, 1, "{d:.0}%", 100);
@@ -190,9 +190,9 @@ test "as partes do tema mudam os componentes por estado" {
 
 test "ids de páginas diferentes não se cruzam" {
     var a: comp.Page = undefined;
-    a.escopo = lk.ids.id("pagina", 0);
+    a.scope = lk.ids.id("pagina", 0);
     a.ids = 0;
     var b = a;
-    b.escopo = lk.ids.id("pagina", 1);
+    b.scope = lk.ids.id("pagina", 1);
     for (0..50) |_| try testing.expect(a.id() != b.id());
 }

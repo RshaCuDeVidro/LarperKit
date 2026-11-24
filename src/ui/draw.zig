@@ -9,7 +9,7 @@ const c = @import("c");
 const kdl = @import("../theme/kdl.zig");
 const theme_mod = @import("../theme/theme.zig");
 const layout = @import("../theme/layout.zig");
-const familia = @import("familia.zig");
+const family = @import("family.zig");
 const bidi = @import("bidi.zig");
 const anim = @import("anim.zig");
 const fx = @import("fx.zig");
@@ -18,8 +18,8 @@ const insp = @import("../inspect/captura.zig");
 pub const Rgba = theme_mod.Rgba;
 pub const Rect = layout.Rect;
 pub const Token = theme_mod.Token;
-pub const Weight = familia.Weight;
-pub const Family = familia.Family;
+pub const Weight = family.Weight;
+pub const Family = family.Family;
 
 /// As famílias que o tema pede pelo nome (`font="Liberation Serif"`), carregadas ao aplicar
 /// o tema: quem carrega as fontes responde.

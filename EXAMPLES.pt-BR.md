@@ -20,7 +20,7 @@ mudança anima e para: quando nada se mexe, nada pede quadro.
 
 ## Uma página de configurações
 
-A página de formulário (`lk.componentes.Page`): títulos, interruptores com descrição, um
+A página de formulário (`lk.components.Page`): títulos, interruptores com descrição, um
 interruptor apagado, um slider, botões lado a lado, um seletor segmentado, um menu de escolha e
 opções de rádio. Cada um deixa uma marca para os testes visuais e ganha o id a partir de um nome.
 

@@ -115,7 +115,7 @@ pub const Manager = struct {
         const keep = if (m.current < m.entries.items.len) try m.gpa.dupe(u8, m.entries.items[m.current].name) else null;
         defer if (keep) |k| m.gpa.free(k);
         m.clearEntries();
-        for (bases.embutidos) |b| try m.put(.{ .name = try m.gpa.dupe(u8, b.name), .builtin = b.source });
+        for (bases.builtins) |b| try m.put(.{ .name = try m.gpa.dupe(u8, b.name), .builtin = b.source });
         for (m.dirs.items) |dir| try m.scanDir(dir);
         for (m.entries.items) |e| try m.names.append(m.gpa, e.name);
         m.previews_stale = true;
@@ -319,7 +319,7 @@ pub fn configDir(gpa: std.mem.Allocator) ?[:0]u8 {
 
 /// Como `configDir`, com a pasta de configurações do sistema já resolvida.
 pub fn configDirIn(gpa: std.mem.Allocator, base: []const u8) ?[:0]u8 {
-    return std.fmt.allocPrintSentinel(gpa, "{s}/{s}/themes", .{ base, app.pasta }, 0) catch null;
+    return std.fmt.allocPrintSentinel(gpa, "{s}/{s}/themes", .{ base, app.folder }, 0) catch null;
 }
 
 /// Lê um tema inteiro para `a` (as bases de `extends`, o --theme-check, o LSP).

@@ -319,7 +319,7 @@ fn place(gpa: std.mem.Allocator, n: *const kdl.Node, rect_in: Rect, env: Env, ou
 }
 
 /// Os componentes, as partes e os temas do larperCord, registrados como um app faria.
-const cord = @import("exemplo_cord.zig");
+const cord = @import("example_cord.zig");
 
 test "row com fixo + flex, gap e hide-below" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -416,7 +416,7 @@ fn sizedNodes(arena: std.mem.Allocator) ![]const kdl.Node {
 }
 
 test "a pessoa alarga os painéis, com a alça do lado da conversa" {
-    cord.registrar();
+    cord.register();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const nodes = try sizedNodes(arena.allocator());
@@ -441,7 +441,7 @@ test "a pessoa alarga os painéis, com a alça do lado da conversa" {
 }
 
 test "janela estreita: o que foi alargado volta, sem mexer no que o tema pediu" {
-    cord.registrar();
+    cord.register();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const nodes = try sizedNodes(arena.allocator());
@@ -478,7 +478,7 @@ test "janela estreita: o que foi alargado volta, sem mexer no que o tema pediu" 
 }
 
 test "layout sem painel ajustável não ganha alça" {
-    cord.registrar();
+    cord.register();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     // Sem vizinho flexível, e num tema só de conversa.
@@ -522,7 +522,7 @@ test "tela dividida: divisas, mínimo de cada painel e janela sem espaço" {
 }
 
 test "coluna só com enfeites em volta do que foi escondido some junto" {
-    cord.registrar();
+    cord.register();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const nodes = try kdl.parse(arena.allocator(), "layout { row { messages; column width=200 { label text=\"x\"; rule height=3; shape; member-list } } }", null);

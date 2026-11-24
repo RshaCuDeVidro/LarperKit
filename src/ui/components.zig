@@ -12,7 +12,7 @@
 //! `segments` de src/ui/settings_voz.zig e `button` de src/ui/inbox.zig (b5b3fc2). Ainda
 //! não foi comparado por imagem com o larperCord (MIGRATION.md). Um tema com `parts`
 //! muda cada pedaço por estado (`part "button:hover" bg="@accent"`): as partes do kit estão
-//! em `partes`, e o app as registra com `registrar` ao abrir.
+//! em `part_specs`, e o app as registra com `register` ao abrir.
 const std = @import("std");
 const c = @import("c");
 const d = @import("draw.zig");
@@ -39,7 +39,7 @@ pub const States = packed struct(u8) {
     _resto: u2 = 0,
 };
 
-pub const estados = [_]tparts.StateSpec{
+pub const state_specs = [_]tparts.StateSpec{
     .{ .name = "on", .desc = "an on/off switch that is on" },
     .{ .name = "selected", .desc = "the chosen option" },
     .{ .name = "danger", .desc = "a button that deletes or leaves" },
@@ -48,7 +48,7 @@ pub const estados = [_]tparts.StateSpec{
     .{ .name = "disabled", .desc = "it can't be used now" },
 };
 
-pub const partes = [_]tparts.PartSpec{
+pub const part_specs = [_]tparts.PartSpec{
     .{ .name = "button", .states = "danger hover pressed", .props = "bg color border border-width radius opacity weight", .desc = "the main button of a page; color is the label's" },
     .{ .name = "button.soft", .states = "hover pressed", .props = "bg color border border-width radius opacity weight", .desc = "a button that isn't the main action" },
     .{ .name = "button.pill", .states = "danger hover pressed", .props = "bg color border border-width radius opacity weight", .desc = "a small rounded text button (panels, lists)" },
@@ -60,13 +60,13 @@ pub const partes = [_]tparts.PartSpec{
     .{ .name = "segment", .states = "selected hover", .props = "bg color border border-width radius opacity weight", .desc = "one option of a segmented control; color is the label's" },
 };
 
-pub const P = tparts.Partes(Part, States, &estados, &partes);
+pub const P = tparts.PartSet(Part, States, &state_specs, &part_specs);
 
-pub const extensao: schema.Extensao = .{ .partes = &P.conjunto };
+pub const extension: schema.Extension = .{ .parts = &P.definition };
 
 /// As partes dos componentes passam a valer nos temas (ao abrir, antes de carregar temas).
-pub fn registrar() void {
-    schema.registrar(&extensao);
+pub fn register() void {
+    schema.register(&extension);
 }
 
 fn look(ctx: *const d.Ctx, p: Part, s: States) *const tparts.Look {
@@ -225,7 +225,7 @@ pub fn slider(ctx: *d.Ctx, dl: *c.ImDrawList, id: usize, tr: d.Rect, value: *f32
 pub const SegmentedOpts = struct {
     /// `suave`: a escolha acende com animação e um texto longo diminui a fonte
     /// (Page.segmented). `simples`: sem animação, fonte fixa (os de settings_voz.zig).
-    estilo: enum { suave, simples } = .suave,
+    style: enum { smooth, plain } = .smooth,
     /// A marca do QA de cada opção: null é "seg:<texto>"; senão "<tag>:<índice>".
     tag: ?[]const u8 = null,
 };
@@ -248,17 +248,17 @@ pub fn segmented(ctx: *d.Ctx, dl: *c.ImDrawList, id: usize, r: d.Rect, options: 
         defer fade.end();
         const radius = l.radius orelse ctx.th.radius + 2;
         const font = ctx.ui.get(ui_parts.weightOr(l, .semibold));
-        const bg = switch (o.estilo) {
-            .suave => blk: {
+        const bg = switch (o.style) {
+            .smooth => blk: {
                 const k = anim.to(anim.id("seg", ids.sub(id, i)), if (sel) 1 else if (hb.hovered) 0.4 else 0, 20);
                 break :blk ctx.col(.rail).alpha(0.6).mix(ctx.col(.accent).alpha(0.22), k);
             },
-            .simples => if (sel) ctx.col(.accent).alpha(0.22) else if (hb.hovered) ctx.col(.hover) else ctx.col(.rail).alpha(0.6),
+            .plain => if (sel) ctx.col(.accent).alpha(0.22) else if (hb.hovered) ctx.col(.hover) else ctx.col(.rail).alpha(0.6),
         };
         d.rect(dl, br, col(ctx, l.bg, bg), radius);
         if (l.border != null) ui_parts.border(ctx, dl, l, br, radius) else d.border(dl, br, if (sel) ctx.col(.accent) else ctx.col(.border), radius, if (sel) 2 else 1);
         // Uma opção longa (russo, alemão) diminui a fonte em vez de passar da borda.
-        const fs = if (o.estilo == .suave) fitSize(font, 15, 11, opt, br.w - 12) else 15;
+        const fs = if (o.style == .smooth) fitSize(font, 15, 11, opt, br.w - 12) else 15;
         const tw = d.width(font, fs, opt);
         d.text(dl, font, fs, br.x + (br.w - tw) / 2, d.centerY(br, fs), col(ctx, l.color, if (sel) ctx.col(.text) else ctx.col(.muted)), opt);
     }
@@ -337,14 +337,14 @@ pub fn wrapText(dl: ?*c.ImDrawList, font: *c.ImFont, size: f32, x: f32, y: f32, 
 // --- Página de formulário ---------------------------------------------------------------
 
 /// Estado de desenho de uma página (posição corrente, largura útil): cada peça desenha em
-/// `y` e desce. `escopo` separa os ids de uma página dos de outra (`ids.id("pagina", n)`).
+/// `y` e desce. `scope` separa os ids de uma página dos de outra (`ids.id("pagina", n)`).
 pub const Page = struct {
     ctx: *d.Ctx,
     dl: *c.ImDrawList,
     x: f32,
     y: f32,
     w: f32,
-    escopo: usize,
+    scope: usize,
     ids: usize = 0,
     /// Marcações do QA para o que é só texto (o QA confere que nada se sobrepõe).
     marks: usize = 0,
@@ -354,7 +354,7 @@ pub const Page = struct {
 
     pub fn id(p: *Page) usize {
         p.ids += 1;
-        return ids.sub(p.escopo, p.ids);
+        return ids.sub(p.scope, p.ids);
     }
 
     pub fn markText(p: *Page, r: d.Rect) void {

@@ -2,7 +2,7 @@
 //! pedaço que está desenhando, na combinação de estados dele, e usa o que vier no lugar
 //! do desenho de sempre. Tema sem `parts` dá sempre `none` (tudo null) e o componente
 //! segue pelo caminho de sempre, pixel por pixel. `P` é o conjunto de partes do app
-//! (`theme.parts.Partes(…)`).
+//! (`theme.parts.PartSet(…)`).
 const std = @import("std");
 const c = @import("c");
 const d = @import("draw.zig");
@@ -99,9 +99,9 @@ pub fn mark(r: d.Rect, comptime P: type, p: P.Part, s: P.States) void {
     if (!insp.recording()) return;
     var buf: [96]u8 = undefined;
     var w = std.Io.Writer.fixed(&buf);
-    w.writeAll(P.conjunto.partes[@intFromEnum(p)].name) catch return;
+    w.writeAll(P.definition.part_specs[@intFromEnum(p)].name) catch return;
     const bits: u8 = @bitCast(s);
-    for (P.conjunto.estados, 0..) |e, i| if (bits & (@as(u8, 1) << @intCast(i)) != 0 and P.hasState(p, @enumFromInt(i))) {
+    for (P.definition.state_specs, 0..) |e, i| if (bits & (@as(u8, 1) << @intCast(i)) != 0 and P.hasState(p, @enumFromInt(i))) {
         w.print(":{s}", .{e.name}) catch return;
     };
     insp.part(r, w.buffered());

@@ -10,7 +10,7 @@ const std = @import("std");
 const lk = @import("larperkit");
 const c = @import("c");
 const d = lk.draw;
-const comp = lk.componentes;
+const comp = lk.components;
 const tr = lk.i18n.tr;
 
 const W: f32 = 1280;
@@ -76,8 +76,8 @@ pub fn main(init: std.process.Init) !void {
     if (!c.cImGui_ImplSDLRenderer3_Init(renderer)) return error.SemImgui;
     defer c.cImGui_ImplSDLRenderer3_Shutdown();
 
-    lk.app.nome = "LarperKit";
-    comp.registrar();
+    lk.app.name = "LarperKit";
+    comp.register();
     // As marcas do QA dizem à animação onde está cada botão.
     lk.qa.enable();
     lk.i18n.set(lang);
@@ -275,7 +275,7 @@ fn configuracoes(app: *App, ctx: *d.Ctx) void {
     // A página.
     const main_r: d.Rect = .{ .x = 300, .y = 24, .w = W - 324, .h = H - 48 };
     cartao(ctx, main_r);
-    var p: comp.Page = .{ .ctx = ctx, .dl = dl, .x = main_r.x + 40, .y = main_r.y + 36, .w = 470, .escopo = lk.id("pagina-chat", 0) };
+    var p: comp.Page = .{ .ctx = ctx, .dl = dl, .x = main_r.x + 40, .y = main_r.y + 36, .w = 470, .scope = lk.id("pagina-chat", 0) };
     p.title(tr("Chat", "Chat"));
     p.heading(tr("Mensagens", "Messages"));
     p.toggle(tr("Prévias de links", "Link previews"), tr("Mostra o título e a imagem dos links enviados.", "Shows the title and picture of links people send."), &Estado.previas);
@@ -287,7 +287,7 @@ fn configuracoes(app: *App, ctx: *d.Ctx) void {
     p.sameLine();
     _ = p.buttonSoft(tr("Restaurar", "Reset"));
     // A segunda coluna: o tema, escolhido ao vivo.
-    var q: comp.Page = .{ .ctx = ctx, .dl = dl, .x = main_r.x + 560, .y = main_r.y + 80, .w = main_r.w - 600, .escopo = lk.id("pagina-tema", 0) };
+    var q: comp.Page = .{ .ctx = ctx, .dl = dl, .x = main_r.x + 560, .y = main_r.y + 80, .w = main_r.w - 600, .scope = lk.id("pagina-tema", 0) };
     q.heading(tr("Tema", "Theme"));
     var tema: u8 = @intCast(Estado.tema % 3);
     q.segmented(&.{ "Noite", "Papel", "Terminal" }, &tema);
@@ -417,7 +417,7 @@ fn grade(app: *App, ctx: *d.Ctx) void {
         d.text(dl, ctx.mono.get(.regular), 13, q.x + 20, q.y + 16, ctx.col(.faint), ctx.th.name);
         const card: d.Rect = .{ .x = q.x + 60, .y = q.y + 46, .w = q.w - 120, .h = q.h - 86 };
         cartao(ctx, card);
-        var p: comp.Page = .{ .ctx = ctx, .dl = dl, .x = card.x + 28, .y = card.y + 22, .w = card.w - 56, .escopo = lk.id("grade", i) };
+        var p: comp.Page = .{ .ctx = ctx, .dl = dl, .x = card.x + 28, .y = card.y + 22, .w = card.w - 56, .scope = lk.id("grade", i) };
         p.line(.bold, 18, ctx.col(.text), if (lk.i18n.en()) ctx.th.description_en else ctx.th.description, 34);
         p.toggle(tr("Notificações", "Notifications"), "", &Estado.grade_toggle[i]);
         p.slider(tr("Volume", "Volume"), &Estado.grade_slider[i], 0, 1, "{d:.0}%", 100);

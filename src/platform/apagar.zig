@@ -1,7 +1,7 @@
 //! "Apagar todos os dados" (Configurações → Avançado): o que o desinstalador apagaria,
 //! sem desinstalar o programa. Saem as duas pastas do app, a das configurações e a do
 //! cache (~/.config/<pasta> e ~/.cache/<pasta>, ou as do XDG; no Windows
-//! %APPDATA%\<pasta> e %LOCALAPPDATA%\<pasta>, com a pasta de `app.pasta`), com tudo
+//! %APPDATA%\<pasta> e %LOCALAPPDATA%\<pasta>, com a pasta de `app.folder`), com tudo
 //! dentro. Os segredos no chaveiro saem também: os serviços `<pasta>-<nome>` do
 //! secret-tool, ou `<Nome do app>/<nome>/*` no Gerenciador de Credenciais, para cada nome
 //! de `chaves` (o dos segredos dos plugins já vem).
@@ -71,7 +71,7 @@ fn put(out: *Pastas, i: usize, base: []const u8) void {
 
 /// A pasta do app dentro de `base` (a de configurações ou a do cache do sistema).
 pub fn pastaEm(buf: []u8, base: []const u8) ?[:0]const u8 {
-    return std.fmt.bufPrintSentinel(buf, "{s}/{s}", .{ base, app.pasta }, 0) catch null;
+    return std.fmt.bufPrintSentinel(buf, "{s}/{s}", .{ base, app.folder }, 0) catch null;
 }
 
 /// O que apaga uma entrada de `chaves`: o filtro do Gerenciador de Credenciais
@@ -79,10 +79,10 @@ pub fn pastaEm(buf: []u8, base: []const u8) ?[:0]const u8 {
 pub fn apagaChave(buf: []u8, nome: []const u8, no_windows: bool) ?[:0]const u8 {
     if (no_windows) {
         const sep: []const u8 = if (nome.len > 0) "/" else "";
-        return std.fmt.bufPrintSentinel(buf, "{s}{s}{s}/*", .{ app.nome, sep, nome }, 0) catch null;
+        return std.fmt.bufPrintSentinel(buf, "{s}{s}{s}/*", .{ app.name, sep, nome }, 0) catch null;
     }
     const dash: []const u8 = if (nome.len > 0) "-" else "";
-    return std.fmt.bufPrintSentinel(buf, "secret-tool clear service {s}{s}{s} 2>/dev/null", .{ app.pasta, dash, nome }, 0) catch null;
+    return std.fmt.bufPrintSentinel(buf, "secret-tool clear service {s}{s}{s} 2>/dev/null", .{ app.folder, dash, nome }, 0) catch null;
 }
 
 fn absolute(p: []const u8) bool {
@@ -123,7 +123,7 @@ fn acabar() void {
         return;
     }
     // Linux e macOS apagam até arquivo aberto: o que sobrou lá não tem como sair.
-    if (windows and !qa_mode) chamarResto() else std.log.warn("apagar: sobrou algo nas pastas do {s}", .{app.nome});
+    if (windows and !qa_mode) chamarResto() else std.log.warn("apagar: sobrou algo nas pastas do {s}", .{app.name});
 }
 
 /// Apaga as pastas. Diz se não sobrou nada.

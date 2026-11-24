@@ -2,16 +2,16 @@
 const std = @import("std");
 
 /// O nome nas mensagens ("needs a newer larperCord").
-pub var nome: []const u8 = "LarperKit";
+pub var name: []const u8 = "LarperKit";
 
 /// A pasta dele dentro da de configurações do sistema ($XDG_CONFIG_HOME/<pasta>,
 /// %APPDATA%\<pasta>): os temas, as traduções e as configurações ficam lá.
-pub var pasta: []const u8 = "larperkit";
+pub var folder: []const u8 = "larperkit";
 
 // --- Testes ---------------------------------------------------------------------------
 
 // O larperCord guarda o login no chaveiro e as configurações nas pastas com estes nomes:
-// com `nome` e `pasta` dele, o kit precisa dar os mesmos, byte por byte, nos dois sistemas.
+// com `name` e `folder` dele, o kit precisa dar os mesmos, byte por byte, nos dois sistemas.
 // Senão, quem atualiza perde o login, os segredos dos plugins e as configurações, e
 // "Apagar todos os dados" deixa coisa para trás. As strings esperadas foram copiadas do
 // larperCord b5b3fc2 (platform/apagar.zig, platform/fsutil.zig, theme/manager.zig), não do
@@ -20,14 +20,14 @@ test "os nomes do larperCord saem iguais (chaveiro e pastas, Linux e Windows)" {
     const apagar = @import("../platform/apagar.zig");
     const fsutil = @import("../platform/fsutil.zig");
     const manager = @import("../theme/manager.zig");
-    const old_nome = nome;
-    const old_pasta = pasta;
+    const old_name = name;
+    const old_folder = folder;
     defer {
-        nome = old_nome;
-        pasta = old_pasta;
+        name = old_name;
+        folder = old_folder;
     }
-    nome = "larperCord";
-    pasta = "larpercord";
+    name = "larperCord";
+    folder = "larpercord";
     var buf: [600]u8 = undefined;
 
     // O chaveiro, como "Apagar todos os dados" do larperCord apaga (as contas, o token de

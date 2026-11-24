@@ -26,7 +26,7 @@ test {
 
 // As funções genéricas, com os tipos de um app de verdade (o exemplo do larperCord).
 test "genéricas com o exemplo do larperCord" {
-    const P = lk.exemplo_cord.Partes;
+    const P = lk.example_cord.Parts;
     _ = &struct {
         fn f(ctx: *const lk.draw.Ctx, r: lk.draw.Rect) void {
             _ = lk.ui_parts.look(ctx, P, .message, .{ .hover = true });
@@ -47,9 +47,9 @@ test "o exemplo do README compila" {
     };
     const lk_ = lk;
     _ = &struct {
-        const comp = lk_.componentes;
+        const comp = lk_.components;
         fn settingsPage(ctx: *lk_.draw.Ctx, s: *Settings) void {
-            var p: comp.Page = .{ .ctx = ctx, .dl = ctx.dl, .x = 40, .y = 40, .w = 480, .escopo = lk_.id("settings", 0) };
+            var p: comp.Page = .{ .ctx = ctx, .dl = ctx.dl, .x = 40, .y = 40, .w = 480, .scope = lk_.id("settings", 0) };
             p.title("Chat");
             p.toggle("Compact mode", "", &s.compact);
             p.slider("Text size", &s.text_size, 0.8, 1.4, "{d:.0}%", 100);
