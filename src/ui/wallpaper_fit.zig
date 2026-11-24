@@ -313,9 +313,11 @@ test "vidro: painel escuro sobre foto escura fica bem translúcido; sobre branco
 }
 
 test "vidro em todos os temas embutidos, no escuro e no claro: o texto continua legível" {
-    const builtin_themes = @import("builtin_themes");
+    // Os temas embutidos de um app de verdade (o exemplo do larperCord).
+    const cord = @import("../theme/exemplo_cord.zig");
     const theme = @import("../theme/theme.zig");
-    for (builtin_themes.list) |b| for ([_]theme.Mode{ .dark, .light }) |mode| {
+    cord.registrar();
+    for (cord.temas) |b| for ([_]theme.Mode{ .dark, .light }) |mode| {
         var t = try theme.loadWith(testing.allocator, b.source, .{ .mode = mode }, null);
         defer t.deinit();
         const panels = [_]Rgba{ t.c(.bg), t.c(.sidebar), t.c(.surface) };

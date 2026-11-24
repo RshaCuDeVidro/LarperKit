@@ -1,15 +1,14 @@
 //! Desenho das partes do tema (theme/parts.zig): cada componente pede o `Look` do
 //! pedaço que está desenhando, na combinação de estados dele, e usa o que vier no lugar
 //! do desenho de sempre. Tema sem `parts` dá sempre `none` (tudo null) e o componente
-//! segue pelo caminho de sempre, pixel por pixel.
+//! segue pelo caminho de sempre, pixel por pixel. `P` é o conjunto de partes do app
+//! (`theme.parts.Partes(…)`).
 const std = @import("std");
 const c = @import("c");
 const d = @import("draw.zig");
 const tp = @import("../theme/parts.zig");
 const insp = @import("../inspect/captura.zig");
 
-pub const Part = tp.Part;
-pub const States = tp.States;
 pub const Look = tp.Look;
 
 /// O tema tem alguma parte: só então vale calcular um estado que custa (quem fala).
@@ -17,9 +16,8 @@ pub fn on(ctx: *const d.Ctx) bool {
     return ctx.th.parts != null;
 }
 
-pub fn look(ctx: *const d.Ctx, p: Part, s: States) *const Look {
-    const t = ctx.th.parts orelse return &tp.none;
-    return t.get(p, s);
+pub fn look(ctx: *const d.Ctx, comptime P: type, p: P.Part, s: P.States) *const Look {
+    return P.get(ctx.th.parts, p, s);
 }
 
 /// A cor da parte, com os tokens de agora (destaque escolhido, `c-…` do nó), ou a de sempre.
@@ -97,13 +95,13 @@ pub const Fade = struct {
 
 /// Para o Inspetor: o nome da parte, com os estados de agora, no retângulo dela
 /// ("channel.item:hover:selected"). O que um tema escreveria para mexer nela.
-pub fn mark(r: d.Rect, p: Part, s: States) void {
+pub fn mark(r: d.Rect, comptime P: type, p: P.Part, s: P.States) void {
     if (!insp.recording()) return;
     var buf: [96]u8 = undefined;
     var w = std.Io.Writer.fixed(&buf);
-    w.writeAll(tp.partes[@intFromEnum(p)].name) catch return;
+    w.writeAll(P.conjunto.partes[@intFromEnum(p)].name) catch return;
     const bits: u8 = @bitCast(s);
-    for (tp.estados, 0..) |e, i| if (bits & (@as(u8, 1) << @intCast(i)) != 0 and tp.hasState(p, @enumFromInt(i))) {
+    for (P.conjunto.estados, 0..) |e, i| if (bits & (@as(u8, 1) << @intCast(i)) != 0 and P.hasState(p, @enumFromInt(i))) {
         w.print(":{s}", .{e.name}) catch return;
     };
     insp.part(r, w.buffered());

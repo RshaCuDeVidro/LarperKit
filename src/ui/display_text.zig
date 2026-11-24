@@ -39,7 +39,8 @@ fn familyFor(ctx: *const d.Ctx, name: ?[]const u8) *d.Family {
     const f = name orelse return ctx.ui;
     if (std.mem.eql(u8, f, "mono")) return ctx.mono;
     if (std.mem.eql(u8, f, "ui")) return ctx.ui;
-    return ctx.fonts.find(f) orelse ctx.ui;
+    const fs = ctx.fonts orelse return ctx.ui;
+    return fs.find(f) orelse ctx.ui;
 }
 
 fn glyphLen(s: []const u8) usize {

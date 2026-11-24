@@ -1,68 +1,56 @@
 //! Contexto de desenho passado a todos os componentes, mais as primitivas
 //! (retângulos, texto, sombras, áreas clicáveis, propriedades do nó).
+//!
+//! O `Ctx` tem só o que o desenho precisa (o tema, as fontes, as listas do ImGui, o
+//! mouse). O app guarda o estado dele num contexto próprio, com este dentro, e chega nele
+//! com `@fieldParentPtr` quando precisa.
 const std = @import("std");
 const c = @import("c");
 const kdl = @import("../theme/kdl.zig");
 const theme_mod = @import("../theme/theme.zig");
 const layout = @import("../theme/layout.zig");
-const fonts_mod = @import("fonts.zig");
+const familia = @import("familia.zig");
 const bidi = @import("bidi.zig");
 const anim = @import("anim.zig");
 const fx = @import("fx.zig");
-const Store = @import("../core/store.zig").Store;
-const Action = @import("../core/event.zig").Action;
-const State = @import("state.zig").State;
 const insp = @import("../inspect/captura.zig");
 
 pub const Rgba = theme_mod.Rgba;
 pub const Rect = layout.Rect;
 pub const Token = theme_mod.Token;
-pub const Weight = fonts_mod.Weight;
-pub const Family = fonts_mod.Family;
+pub const Weight = familia.Weight;
+pub const Family = familia.Family;
 
-pub const Stats = struct {
-    ram_kb: u32 = 0,
-    /// Alguém desenhou o número desde o último tique (ler o /proc custa).
-    ram_seen: bool = false,
-    /// A parte da RAM que não é do app, e o que o malloc tem (0 = não se sabe aqui).
-    file_kb: u32 = 0,
-    heap_used_kb: u32 = 0,
-    heap_free_kb: u32 = 0,
-    frame_us: u32 = 0,
-    frames_built: u64 = 0,
-    frames_skipped: u64 = 0,
-    theme_count: usize = 0,
+/// As famílias que o tema pede pelo nome (`font="Liberation Serif"`), carregadas ao aplicar
+/// o tema: quem carrega as fontes responde.
+pub const Fontes = struct {
+    ptr: *anyopaque,
+    findFn: *const fn (ptr: *anyopaque, name: []const u8) ?*Family,
+
+    pub fn find(f: Fontes, name: []const u8) ?*Family {
+        return f.findFn(f.ptr, name);
+    }
 };
 
 pub const Ctx = struct {
     th: *const theme_mod.Theme,
-    theme_name: []const u8,
-    theme_names: []const []const u8,
-    theme_index: usize,
-    store: *Store,
-    st: *State,
-    fonts: *fonts_mod.Fonts,
+    /// null: só `ui` e `mono`.
+    fonts: ?Fontes = null,
     ui: *Family,
     mono: *Family,
     dl: *c.ImDrawList,
     fg: *c.ImDrawList,
     io: *c.ImGuiIO,
+    /// Onde os efeitos criam texturas (fx.zig).
+    renderer: *c.SDL_Renderer,
     mouse: c.ImVec2,
     now_ms: i64,
-    actions: *std.ArrayList(Action),
-    stats: *Stats,
-    images: *@import("images.zig").Cache,
     win: Rect,
     /// Algum elemento clicável está sob o mouse neste quadro.
     hot: bool = false,
-    /// O quadro é o da janela flutuante (ui/flutuante.zig): outro contexto do ImGui,
-    /// outra janela, e o que é só da principal (a caixa de texto, a barra de ações da
-    /// mensagem, os painéis) fica de fora.
+    /// O quadro é o de uma janela flutuante (outro contexto do ImGui, outra janela): o que
+    /// é só da principal fica de fora.
     pip: bool = false,
-
-    pub fn act(ctx: *Ctx, a: Action) void {
-        ctx.actions.append(ctx.st.gpa, a) catch {};
-    }
 
     pub fn col(ctx: *const Ctx, t: Token) Rgba {
         return ctx.th.c(t);
@@ -75,12 +63,8 @@ pub const Ctx = struct {
         const f = n.str("font") orelse return ctx.ui;
         if (std.mem.eql(u8, f, "mono")) return ctx.mono;
         if (std.mem.eql(u8, f, "ui")) return ctx.ui;
-        return ctx.fonts.find(f) orelse ctx.ui;
-    }
-
-    /// Abre um popup (menu de contexto, perfil, emoji) na posição do mouse.
-    pub fn popup(ctx: *Ctx, p: @import("state.zig").Popup) void {
-        ctx.st.popup = p;
+        const fs = ctx.fonts orelse return ctx.ui;
+        return fs.find(f) orelse ctx.ui;
     }
 
     pub fn hovering(ctx: *const Ctx, r: Rect) bool {

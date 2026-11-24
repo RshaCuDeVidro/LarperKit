@@ -56,6 +56,35 @@ pub fn traducoes(b: *std.Build, kit: *std.Build, pasta: []const u8) *std.Build.M
     return b.createModule(.{ .root_source_file = wf.add("traducoes.zig", src.items) });
 }
 
+/// GNU FriBidi (third_party/fribidi): o texto da direita para a esquerda na ordem de desenho
+/// (src/ui/bidi.zig). Os includes vão só nestes arquivos: o config.h e o common.h dele têm
+/// nomes comuns demais.
+const fribidi_sources = [_][]const u8{
+    "fribidi-arabic.c", "fribidi-bidi.c", "fribidi-bidi-types.c", "fribidi-brackets.c", "fribidi-joining.c",
+    "fribidi-joining-types.c", "fribidi-mirroring.c", "fribidi-run.c", "fribidi-shape.c",
+};
+
+fn addFribidi(b: *std.Build, m: *std.Build.Module) void {
+    const inc = struct {
+        fn f(bb: *std.Build, sub: []const u8) []const u8 {
+            return bb.fmt("-I{s}", .{bb.root.joinString(bb.allocator, sub) catch @panic("OOM")});
+        }
+    }.f;
+    m.addCSourceFiles(.{
+        .root = b.path("third_party/fribidi/lib"),
+        .files = &fribidi_sources,
+        .flags = &.{
+            "-std=gnu99",
+            "-O2",
+            "-fno-sanitize=undefined",
+            "-DHAVE_CONFIG_H",
+            "-DFRIBIDI_ENTRY=",
+            inc(b, "third_party/fribidi/config"),
+            inc(b, "third_party/fribidi/lib"),
+        },
+    });
+}
+
 /// tools/comprimir.zig, para a máquina que compila.
 fn comprimir(b: *std.Build, kit: *std.Build) *std.Build.Step.Compile {
     const m = b.createModule(.{
@@ -96,6 +125,10 @@ pub fn build(b: *std.Build) void {
     }
     const c = translate.createModule();
 
+    // As marcas dos testes visuais (ui/qa.zig): o app liga com -Dqa no build dele.
+    const opts = b.addOptions();
+    opts.addOption(bool, "qa", b.option(bool, "qa", "Compila as marcas dos testes visuais (ui/qa.zig)") orelse false);
+
     // A biblioteca: quem usa importa `larperkit` (e pode trocar o `c` pelo dele).
     const mod = b.addModule("larperkit", .{
         .root_source_file = b.path("src/larperkit.zig"),
@@ -104,6 +137,8 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
     mod.addImport("c", c);
+    mod.addOptions("build_options", opts);
+    addFribidi(b, mod);
 
     // Testes das partes puras (sem janela nem GPU, sem SDL): rodam em qualquer CI. Para
     // Windows saindo do Linux, `-fwine` roda com o wine.
@@ -113,6 +148,8 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .link_libc = true,
     });
+    test_mod.addOptions("build_options", opts);
+    addFribidi(b, test_mod);
     // Os testes das traduções embutem o japonês e o russo de exemplo como um app embutiria.
     test_mod.addImport("i18n_exemplo", traducoes(b, b, "src/ui/exemplo_i18n"));
     const tests = b.addTest(.{ .name = "larperkit-test", .root_module = test_mod });

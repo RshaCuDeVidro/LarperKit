@@ -23,3 +23,14 @@ test {
     @setEvalBranchQuota(1_000_000);
     refAll(lk, 4);
 }
+
+// As funções genéricas, com os tipos de um app de verdade (o exemplo do larperCord).
+test "genéricas com o exemplo do larperCord" {
+    const P = lk.exemplo_cord.Partes;
+    _ = &struct {
+        fn f(ctx: *const lk.draw.Ctx, r: lk.draw.Rect) void {
+            _ = lk.ui_parts.look(ctx, P, .message, .{ .hover = true });
+            lk.ui_parts.mark(r, P, .channel_item, .{ .selected = true });
+        }
+    }.f;
+}

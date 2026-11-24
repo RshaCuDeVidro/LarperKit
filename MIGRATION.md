@@ -46,3 +46,16 @@ keychain entries and the folders the kit builds against the strings in larperCor
 A different name means people lose their login, their plugin secrets and their settings on
 update, and "Delete all data" leaves things behind. When the plugin runtime moves (its secrets
 are `larpercord-plugin` and `larperCord/plugin/<plugin>/<key>`), its names join that test.
+
+## Drawing (`src/ui/draw.zig` and friends)
+
+| Before (larperCord) | After (LarperKit) |
+| --- | --- |
+| `d.Ctx` with `store`, `st`, `actions`, `stats`, `images`, `theme_name`, `theme_names`, `theme_index` | `lk.draw.Ctx` keeps only what drawing needs (`th`, `fonts`, `ui`, `mono`, `dl`, `fg`, `io`, `renderer`, `mouse`, `now_ms`, `win`, `hot`, `pip`); the app's context holds a `lk.draw.Ctx` and its own state, and gets back to itself with `@fieldParentPtr` |
+| `ctx.act(…)`, `ctx.popup(…)`, `d.Stats` | stay in the app's context |
+| `ctx.images.renderer` (in `ui/fx.zig`) | `ctx.renderer` |
+| `ctx.fonts` (a `*fonts.Fonts`) | `ctx.fonts`, an optional `lk.draw.Fontes` (`ptr` + `findFn`) until the fonts move |
+| `fonts.Weight`, `fonts.Family` | `lk.familia.Weight`, `lk.familia.Family` (also `lk.draw.Weight`, `lk.draw.Family`) |
+| `ui/parts.zig`: `look(ctx, .message, s)`, `mark(r, .message, s)` | `look(ctx, P, .message, s)`, `mark(r, P, .message, s)` with the app's `P = lk.parts.Partes(…)` |
+| `-Dqa` (the `qa` build option of the app) | `b.dependency("larperkit", .{ .qa = true })`; the kit's `ui/qa.zig` reads its own `build_options.qa` |
+| `third_party/fribidi` compiled by the app | compiled by the kit's module |

@@ -91,15 +91,18 @@ pub const Conjunto = struct {
 /// ordem de `partes` (`channel.voice-member` é `channel_voice_member`), e `States` um
 /// `packed struct(u8)` com um bool por estado, na ordem de `estados`. O app registra
 /// `&conjunto` e desenha com `get`.
-pub fn Partes(comptime Part: type, comptime States: type, comptime estados: []const StateSpec, comptime partes: []const PartSpec) type {
+pub fn Partes(comptime TPart: type, comptime TStates: type, comptime estados: []const StateSpec, comptime partes: []const PartSpec) type {
     comptime {
         std.debug.assert(estados.len <= 8);
-        std.debug.assert(@typeInfo(Part).@"enum".field_names.len == partes.len);
-        std.debug.assert(@bitSizeOf(States) == 8);
-        for (partes, 0..) |p, i| std.debug.assert(sameName(p.name, @tagName(@as(Part, @enumFromInt(i)))));
-        for (estados, 0..) |s, i| std.debug.assert(std.mem.eql(u8, s.name, @typeInfo(States).@"struct".field_names[i]));
+        std.debug.assert(@typeInfo(TPart).@"enum".field_names.len == partes.len);
+        std.debug.assert(@bitSizeOf(TStates) == 8);
+        for (partes, 0..) |p, i| std.debug.assert(sameName(p.name, @tagName(@as(TPart, @enumFromInt(i)))));
+        for (estados, 0..) |s, i| std.debug.assert(std.mem.eql(u8, s.name, @typeInfo(TStates).@"struct".field_names[i]));
     }
     return struct {
+        pub const Part = TPart;
+        pub const States = TStates;
+
         const valid_states: [partes.len]u8 = blk: {
             @setEvalBranchQuota(20_000);
             var out: [partes.len]u8 = @splat(0);
@@ -129,17 +132,17 @@ pub fn Partes(comptime Part: type, comptime States: type, comptime estados: []co
         pub const conjunto: Conjunto = .{ .estados = estados, .partes = partes, .valid_states = &valid_states, .valid_props = &valid_props };
 
         /// Como a parte fica nessa combinação de estados, no tema `t` (`theme.parts`).
-        pub fn get(t: ?*const Table, p: Part, s: States) *const Look {
+        pub fn get(t: ?*const Table, p: TPart, s: TStates) *const Look {
             const tb = t orelse return &none;
             const index = tb.indexOf(&conjunto) orelse return &none;
             return &tb.looks[index[@intFromEnum(p)][@as(u8, @bitCast(s))]];
         }
 
-        pub fn hasState(p: Part, s: std.meta.FieldEnum(States)) bool {
+        pub fn hasState(p: TPart, s: std.meta.FieldEnum(TStates)) bool {
             return conjunto.hasState(@intFromEnum(p), @intCast(@intFromEnum(s)));
         }
 
-        pub fn hasProp(p: Part, pr: Prop) bool {
+        pub fn hasProp(p: TPart, pr: Prop) bool {
             return conjunto.hasProp(@intFromEnum(p), pr);
         }
     };

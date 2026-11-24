@@ -98,6 +98,7 @@ pub fn markTop(r: layout.Rect, comptime fmt: []const u8, args: anytype) void {
 }
 
 pub fn find(key: []const u8) ?layout.Rect {
+    if (!compiled) return null;
     // A última marcação com o nome vence (o que foi desenhado por cima).
     var i = prev_count;
     while (i > 0) {
@@ -110,6 +111,7 @@ pub fn find(key: []const u8) ?layout.Rect {
 /// A parte da marcação que aparece de verdade (dentro do recorte da janela dela), ou
 /// null quando ela está toda escondida.
 pub fn visiblePart(key: []const u8) ?layout.Rect {
+    if (!compiled) return null;
     var i = prev_count;
     while (i > 0) {
         i -= 1;
