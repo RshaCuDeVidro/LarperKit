@@ -1,0 +1,33 @@
+// papel — claro e quente, com curvas de nível bem discretas.
+theme "papel" description="Claro, cor de papel." description-en="Light, paper colored."
+
+colors {
+    bg       "#f6f1e7"
+    rail     "#efe8da"
+    sidebar  "#f1ebdf"
+    surface  "#fbf8f2"
+    elevated "#ffffff"
+    overlay  "#ffffff"
+    text     "#2b2620"
+    muted    "#6e655a"
+    faint    "#9a9083"
+    accent   "#d9622b"
+    accent-text "#ffffff"
+    border   "alpha(#2b2620, 0.12)"
+    hover    "alpha(#2b2620, 0.06)"
+    selected "alpha(#d9622b, 0.14)"
+    danger   "#c73e3e"
+    online   "#3f9c5a"
+    idle     "#c98a12"
+    shadow   "alpha(#2b2620, 0.18)"
+}
+
+fonts ui="Inter" mono="JetBrains Mono" size=16
+metrics radius=10
+
+layout {
+    stack gradient="#f6f1e7 #efe6d6" {
+        topography seed=9 levels=22 color="alpha(@text, 0.07)"
+        spacer
+    }
+}

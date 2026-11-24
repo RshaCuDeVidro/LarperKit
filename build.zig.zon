@@ -10,6 +10,7 @@
         "src",
         "third_party",
         "tools",
+        "examples",
         "LICENSE",
         "README.md",
     },

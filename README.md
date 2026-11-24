@@ -11,7 +11,9 @@ Zig 0.17 · SDL3 · Dear ImGui · KDL · Lua 5.4
 </div>
 
 > [!NOTE]
-> Early days: nothing has moved here yet. The code still lives in [larperCord](https://github.com/RshaCuDeVidro/larperCord) and larperNotes, and comes over one piece at a time (see [Roadmap](#roadmap)). This is a kit for my own programs, so the API changes whenever one of them needs it to.
+> Early days. The theme engine, translations, drawing and the first components are here and tested; plugins and fonts come next, and neither [larperCord](https://github.com/RshaCuDeVidro/larperCord) nor larperNotes uses the kit yet (see [Roadmap](#roadmap)). This is a kit for my own programs, so the API changes whenever one of them needs it to.
+
+![The settings page in motion: a switch, a slider and three themes](docs/images/demo-en.gif)
 
 ## Why
 
@@ -20,6 +22,15 @@ larperCord and larperNotes are built the same way. SDL3 opens the window, and De
 larperNotes started from a copy of larperCord's base, and the two copies have drifted apart. Notes' theme engine is 2,400 lines, and larperCord's is 8,100: schema, parts, a language server, vector shapes and wallpaper are all missing on the Notes side. Every fix has to be carried over by hand, and most never are.
 
 LarperKit keeps that base in one place. An app imports it and gets themes, components and plugins. The app writes only what is its own: its screens, the components its themes can style, and what its plugins are allowed to do.
+
+## Examples
+
+Drawn by the gallery ([`examples/vitrine`](examples/vitrine/main.zig)) without opening a window. More in **[EXAMPLES.md](EXAMPLES.md)**.
+
+| | |
+| --- | --- |
+| ![A dashboard](docs/images/dashboard-en.png) | ![A settings page](docs/images/settings-en.png) |
+| ![Four themes](docs/images/themes-en.png) | ![Parts with states](docs/images/parts-en.png) |
 
 ## What goes in
 
@@ -32,20 +43,25 @@ LarperKit keeps that base in one place. An app imports it and gets themes, compo
 - **Plugins.** The Lua 5.4 runtime: the sandbox, manifests, permissions, HTTP with per-host rules, secrets in the system keychain, translated labels and the plugin panel. The app decides which functions its plugins get.
 - **Translations.** Languages come from `.kdl` files, with plural forms, live reload and a coverage count per language.
 - **Text.** Fonts with per-script fallback to the system's fonts, plus the patched Dear ImGui (right-to-left text, input methods and the font changes) that both apps build on.
-- **Gallery.** A small app that draws every component in every theme: light and dark, at other scales, and right to left. It is both the demo and the target of the visual tests, so the kit tests itself without opening an app.
+- **Gallery.** A small app that draws every component in every theme: light and dark, at other scales, and right to left. It is both the demo and the target of the visual tests, so the kit tests itself without opening an app. The first version makes the pictures in [EXAMPLES.md](EXAMPLES.md).
 
-## Planned API
+## API
 
-A sketch of where this is going. None of it compiles yet.
+What it looks like today. It will change as the apps move over.
 
 ```zig
 const lk = @import("larperkit");
+const comp = lk.componentes;
 
-fn settingsPage(ui: *lk.Ui, s: *Settings) void {
-    if (ui.button(lk.id("save", 0), "Save", .{ .kind = .primary })) s.save();
-    ui.toggle(lk.id("compact", 0), "Compact mode", &s.compact);
+fn settingsPage(ctx: *lk.draw.Ctx, s: *Settings) void {
+    var p: comp.Page = .{ .ctx = ctx, .dl = ctx.dl, .x = 40, .y = 40, .w = 480, .escopo = lk.id("settings", 0) };
+    p.title("Chat");
+    p.toggle("Compact mode", "", &s.compact);
+    p.slider("Text size", &s.text_size, 0.8, 1.4, "{d:.0}%", 100);
+    if (p.button("Save", false)) s.save();
     for (s.accounts, 0..) |_, i| {
-        if (ui.iconButton(lk.id("remove-account", i), .trash, .{ .kind = .danger })) s.remove(i);
+        const r: lk.draw.Rect = .{ .x = 40, .y = p.y + @as(f32, @floatFromInt(i)) * 40, .w = 120, .h = 32 };
+        if (comp.button(ctx, ctx.dl, lk.id("remove-account", i), r, "Remove", .{ .kind = .pill, .danger = true })) s.remove(i);
     }
 }
 ```
@@ -61,9 +77,9 @@ parts {
 
 ## Roadmap
 
-- [ ] **Core:** the theme engine, ids, animation, drawing and translations, taken from larperCord's current code.
+- [x] **Core:** the theme engine, ids, animation, drawing and translations, taken from larperCord's current code.
 - [ ] **larperNotes** switches to the core and drops its own copies.
-- [ ] **Components** and the gallery.
+- [ ] **Components** and the gallery. Button, toggle, slider, segmented control and the form page are in, and the gallery makes the [examples](EXAMPLES.md).
 - [ ] **Plugin runtime.**
 - [ ] **Fonts** and the patched Dear ImGui.
 - [ ] **larperCord** switches over one module at a time, after its 0.7 release.

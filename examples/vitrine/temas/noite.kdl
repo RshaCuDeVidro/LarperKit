@@ -1,0 +1,32 @@
+// noite — escuro, com duas cortinas de aurora atrás de tudo.
+theme "noite" description="Escuro, com aurora." description-en="Dark, with an aurora."
+
+colors {
+    bg       "#0f1117"
+    rail     "#0b0d12"
+    sidebar  "#12151d"
+    surface  "#161a24"
+    elevated "#1d2230"
+    overlay  "#1d2230"
+    text     "#e8eaf2"
+    muted    "#9aa3b8"
+    faint    "#6b7389"
+    accent   "#8b7bff"
+    accent-text "#ffffff"
+    border   "alpha(#e8eaf2, 0.08)"
+    hover    "alpha(#e8eaf2, 0.06)"
+    selected "alpha(#8b7bff, 0.18)"
+    danger   "#ff5d73"
+    online   "#3ddc97"
+    idle     "#ffb547"
+}
+
+fonts ui="Inter" mono="JetBrains Mono" size=16
+metrics radius=8
+
+layout {
+    stack gradient="#0f1117 #131726" {
+        aurora color="alpha(@accent, 0.32)" color2="alpha(#3ddbd9, 0.22)" seed=4
+        spacer
+    }
+}

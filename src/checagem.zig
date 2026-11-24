@@ -34,3 +34,30 @@ test "genéricas com o exemplo do larperCord" {
         }
     }.f;
 }
+
+// O exemplo do README (a seção API), como está lá: se a API mudar, este teste lembra de
+// mudar o README junto.
+test "o exemplo do README compila" {
+    const Settings = struct {
+        compact: bool = false,
+        text_size: f32 = 1,
+        accounts: []const u8 = &.{},
+        fn save(_: *@This()) void {}
+        fn remove(_: *@This(), _: usize) void {}
+    };
+    const lk_ = lk;
+    _ = &struct {
+        const comp = lk_.componentes;
+        fn settingsPage(ctx: *lk_.draw.Ctx, s: *Settings) void {
+            var p: comp.Page = .{ .ctx = ctx, .dl = ctx.dl, .x = 40, .y = 40, .w = 480, .escopo = lk_.id("settings", 0) };
+            p.title("Chat");
+            p.toggle("Compact mode", "", &s.compact);
+            p.slider("Text size", &s.text_size, 0.8, 1.4, "{d:.0}%", 100);
+            if (p.button("Save", false)) s.save();
+            for (s.accounts, 0..) |_, i| {
+                const r: lk_.draw.Rect = .{ .x = 40, .y = p.y + @as(f32, @floatFromInt(i)) * 40, .w = 120, .h = 32 };
+                if (comp.button(ctx, ctx.dl, lk_.id("remove-account", i), r, "Remove", .{ .kind = .pill, .danger = true })) s.remove(i);
+            }
+        }
+    }.settingsPage;
+}

@@ -85,6 +85,32 @@ fn addFribidi(b: *std.Build, m: *std.Build.Module) void {
     });
 }
 
+/// O Dear ImGui do kit (third_party/imgui, com as mudanças do larperCord) e as bindings em
+/// C, sem FreeType (as letras do stb_truetype do ImGui). `sdl`: também os backends da SDL3.
+fn addImgui(b: *std.Build, m: *std.Build.Module, sdl: bool) void {
+    m.addIncludePath(b.path("third_party/imgui"));
+    m.addIncludePath(b.path("third_party/imgui/backends"));
+    m.addIncludePath(b.path("third_party/dcimgui"));
+    m.addIncludePath(b.path("third_party/dcimgui/backends"));
+    m.addCMacro("IMGUI_USE_WCHAR32", "1");
+    // Os ganchos de item do ImGui para o Inspetor (src/inspect/ganchos.cpp), como no app.
+    m.addCMacro("IMGUI_ENABLE_TEST_ENGINE", "1");
+    const flags: []const []const u8 = &.{ "-std=c++17", "-fno-exceptions", "-fno-rtti" };
+    m.addCSourceFiles(.{
+        .root = b.path("third_party"),
+        .files = &.{ "imgui/imgui.cpp", "imgui/imgui_draw.cpp", "imgui/imgui_tables.cpp", "imgui/imgui_widgets.cpp", "dcimgui/dcimgui.cpp" },
+        .flags = flags,
+    });
+    if (sdl) m.addCSourceFiles(.{
+        .root = b.path("third_party"),
+        .files = &.{ "imgui/backends/imgui_impl_sdl3.cpp", "imgui/backends/imgui_impl_sdlrenderer3.cpp", "dcimgui/backends/dcimgui_impl_sdl3.cpp", "dcimgui/backends/dcimgui_impl_sdlrenderer3.cpp" },
+        .flags = flags,
+    });
+    // Só os stubs: as bindings citam ShowDemoWindow.
+    m.addCSourceFile(.{ .file = b.path("third_party/imgui/imgui_demo.cpp"), .flags = &.{ "-std=c++17", "-fno-exceptions", "-fno-rtti", "-DIMGUI_DISABLE_DEMO_WINDOWS" } });
+    m.addCSourceFile(.{ .file = b.path("src/inspect/ganchos.cpp"), .flags = flags });
+}
+
 /// tools/comprimir.zig, para a máquina que compila.
 fn comprimir(b: *std.Build, kit: *std.Build) *std.Build.Step.Compile {
     const m = b.createModule(.{
@@ -171,22 +197,34 @@ pub fn build(b: *std.Build) void {
     });
     ui_mod.addImport("larperkit", mod);
     ui_mod.addImport("c", c);
-    ui_mod.addIncludePath(b.path("third_party/imgui"));
-    ui_mod.addIncludePath(b.path("third_party/dcimgui"));
-    ui_mod.addCMacro("IMGUI_USE_WCHAR32", "1");
-    // Os ganchos de item do ImGui para o Inspetor (src/inspect/ganchos.cpp), como no app.
-    ui_mod.addCMacro("IMGUI_ENABLE_TEST_ENGINE", "1");
-    ui_mod.addCSourceFile(.{ .file = b.path("src/inspect/ganchos.cpp"), .flags = &.{ "-std=c++17", "-fno-exceptions", "-fno-rtti" } });
-    ui_mod.addCSourceFiles(.{
-        .root = b.path("third_party"),
-        .files = &.{ "imgui/imgui.cpp", "imgui/imgui_draw.cpp", "imgui/imgui_tables.cpp", "imgui/imgui_widgets.cpp", "dcimgui/dcimgui.cpp" },
-        .flags = &.{ "-std=c++17", "-fno-exceptions", "-fno-rtti" },
-    });
-    // Só os stubs: as bindings citam ShowDemoWindow.
-    ui_mod.addCSourceFile(.{ .file = b.path("third_party/imgui/imgui_demo.cpp"), .flags = &.{ "-std=c++17", "-fno-exceptions", "-fno-rtti", "-DIMGUI_DISABLE_DEMO_WINDOWS" } });
+    addImgui(b, ui_mod, false);
     const ui_tests = b.addTest(.{ .name = "larperkit-test-ui", .root_module = ui_mod });
     b.step("test-ui", "Roda os testes dos componentes num ImGui sem janela").dependOn(&b.addRunArtifact(ui_tests).step);
     b.step("test-ui-bin", "Instala o executável dos testes dos componentes").dependOn(&b.addInstallArtifact(ui_tests, .{}).step);
+
+    // A vitrine (examples/vitrine): cada componente em cada tema, desenhado sem janela
+    // (driver offscreen da SDL) e gravado em PNG, para os exemplos da documentação.
+    const vit_mod = b.createModule(.{
+        .root_source_file = b.path("examples/vitrine/main.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    vit_mod.addImport("larperkit", mod);
+    vit_mod.addImport("c", c);
+    addImgui(b, vit_mod, true);
+    if (windows) {
+        vit_mod.addIncludePath(deps.path(b, "windows/include"));
+        vit_mod.addLibraryPath(deps.path(b, "windows/lib"));
+        vit_mod.linkSystemLibrary("SDL3.dll", .{ .use_pkg_config = .no });
+        for ([_][]const u8{ "gdi32", "imm32", "ole32", "user32", "shell32", "setupapi", "version", "winmm" }) |l| vit_mod.linkSystemLibrary(l, .{ .use_pkg_config = .no });
+    } else if (sdl_include) |dir| {
+        vit_mod.addIncludePath(.{ .cwd_relative = dir });
+        vit_mod.linkSystemLibrary("SDL3", .{ .use_pkg_config = .no });
+    } else vit_mod.linkSystemLibrary("sdl3", .{});
+    const vitrine = b.addExecutable(.{ .name = "vitrine", .root_module = vit_mod });
+    b.step("vitrine", "Compila a vitrine (examples/vitrine)").dependOn(&b.addInstallArtifact(vitrine, .{}).step);
 
     // Confere que tudo o que o módulo exporta compila, inclusive o que chama a SDL e o
     // ImGui (sem ligar nada, então serve para qualquer alvo).

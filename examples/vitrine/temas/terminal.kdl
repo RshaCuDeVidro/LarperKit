@@ -1,0 +1,32 @@
+// terminal — preto e verde, cantos retos e um céu de estrelas.
+theme "terminal" description="Preto e verde, de terminal." description-en="Black and green, like a terminal."
+
+colors {
+    bg       "#050806"
+    rail     "#030504"
+    sidebar  "#07100b"
+    surface  "#08120c"
+    elevated "#0d1c13"
+    overlay  "#0d1c13"
+    text     "#b8f5c8"
+    muted    "#6fbf86"
+    faint    "#3f7a52"
+    accent   "#39ff88"
+    accent-text "#03150a"
+    border   "alpha(#39ff88, 0.18)"
+    hover    "alpha(#39ff88, 0.08)"
+    selected "alpha(#39ff88, 0.16)"
+    danger   "#ff4d4d"
+    online   "#39ff88"
+    idle     "#e8d44d"
+}
+
+fonts ui="JetBrains Mono" mono="JetBrains Mono" size=15
+metrics radius=2
+
+layout {
+    stack gradient="#050806 #07120b" {
+        starfield color="alpha(@accent, 0.35)" color2="alpha(@text, 0.7)" density=1.4 seed=3
+        spacer
+    }
+}
