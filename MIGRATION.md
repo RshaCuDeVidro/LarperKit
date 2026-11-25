@@ -75,6 +75,7 @@ are `larpercord-plugin` and `larperCord/plugin/<plugin>/<key>`), its names join 
 | `-Dqa` (the `qa` build option of the app) | the app passes its own value on: `b.dependency("larperkit", .{ .qa = qa, … })`. The kit's default is the same as larperCord's (on in Debug only), but an app that changes its own must pass it, or its robot runs without the kit's marks, or a release ships with them |
 | the Inspector recording in `inspect/captura.zig` (`kind`, rectangle, QA mark, part) | unchanged: the kit's drawing calls it exactly as before, so `ctl inspect el` and the Inspector card see the same elements |
 | `third_party/fribidi` compiled by the app | compiled by the kit's module |
+| `d.tip(ctx, r, label, hovered)`, which crashes when the tip is wider than the window | same call; long text breaks into lines and the tip stays inside the window. It leaves the QA mark `tip` |
 
 ## Components (`src/ui/components.zig`, `src/ui/ids.zig`)
 

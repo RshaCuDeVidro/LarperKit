@@ -188,6 +188,86 @@ test "as partes do tema mudam os componentes por estado" {
     for (0..2) |_| _ = h.frame(Tela);
 }
 
+/// Uma dica sempre visível sobre `alvo`, numa janela de largura `w`.
+const Dica = struct {
+    var w: f32 = 900;
+    var alvo: d.Rect = .{ .x = 400, .y = 300, .w = 24, .h = 24 };
+    var label: []const u8 = "";
+    var linhas: usize = 0;
+    var pedacos: [3][]const u8 = undefined;
+    var quebra_de: []const u8 = "";
+    var quebra_em: f32 = 0;
+
+    fn f(ctx: *d.Ctx) void {
+        ctx.win.w = w;
+        d.tip(ctx, alvo, label, true);
+        if (quebra_de.len > 0) linhas = d.breakLines(ctx.ui.get(.semibold), 13, quebra_de, quebra_em, &pedacos);
+    }
+
+    /// Dois quadros (o QA lê as marcas do anterior) e o retângulo da dica.
+    fn rect(h: *Harness) !d.Rect {
+        for (0..2) |_| _ = h.frame(Dica);
+        return lk.qa.find("tip") orelse error.SemDica;
+    }
+
+    fn quebra(h: *Harness, s: []const u8, max_w: f32) []const []const u8 {
+        quebra_de = s;
+        quebra_em = max_w;
+        _ = h.frame(Dica);
+        quebra_de = "";
+        return pedacos[0..linhas];
+    }
+};
+
+test "a dica cabe na janela: quebra em linhas e não derruba o app numa janela menor que ela" {
+    var h = try Harness.init(tema);
+    defer h.deinit();
+    h.mouse(-1000, -1000, false);
+    const font = h.family.get(.semibold);
+
+    // Curta: o retângulo de sempre, centrado 8 acima do botão.
+    Dica.w = 900;
+    Dica.label = "Copiar";
+    var r = try Dica.rect(&h);
+    const tw = d.width(font, 13, "Copiar");
+    try testing.expectEqual(@as(f32, 26), r.h);
+    try testing.expectEqual(tw + 20, r.w);
+    try testing.expectEqual(Dica.alvo.y - 34, r.y);
+    try testing.expectEqual(Dica.alvo.x + Dica.alvo.w / 2 - r.w / 2, r.x);
+
+    // Longa numa janela estreita, com o botão encostado na direita: várias linhas, dentro.
+    Dica.w = 200;
+    Dica.alvo.x = 170;
+    Dica.label = "Rede virtual desligada: ligue o adaptador nas configurações para ver os outros computadores";
+    r = try Dica.rect(&h);
+    try testing.expect(r.h > 26);
+    try testing.expect(r.x >= 4 and r.right() <= Dica.w - 4);
+
+    // Janela menor que qualquer dica: a borda da esquerda ganha, sem o panic do clamp.
+    Dica.w = 20;
+    r = try Dica.rect(&h);
+    try testing.expectEqual(@as(f32, 4), r.x);
+}
+
+test "breakLines: espaços, \\n, palavra que não cabe e o limite de linhas" {
+    var h = try Harness.init(tema);
+    defer h.deinit();
+    h.mouse(-1000, -1000, false);
+    Dica.w = 900;
+    Dica.label = "";
+    const font = h.family.get(.semibold);
+    const eq = testing.expectEqualDeep;
+
+    try eq(@as([]const []const u8, &.{"um  dois"}), Dica.quebra(&h, "  um  dois ", 1000));
+    try eq(@as([]const []const u8, &.{ "um", "dois" }), Dica.quebra(&h, "um dois", d.width(font, 13, "um dois") - 1));
+    try eq(@as([]const []const u8, &.{ "um", "dois" }), Dica.quebra(&h, "um\ndois", 1000));
+    // A palavra que sozinha não cabe fica numa linha só dela.
+    try eq(@as([]const []const u8, &.{ "a", "enormeenormeenorme", "b" }), Dica.quebra(&h, "a enormeenormeenorme b", d.width(font, 13, "a b")));
+    // Três linhas no máximo: o resto vai na última.
+    try eq(@as([]const []const u8, &.{ "a", "b", "c d e" }), Dica.quebra(&h, "a b c d e", 1));
+    try eq(@as([]const []const u8, &.{""}), Dica.quebra(&h, "   ", 100));
+}
+
 test "ids de páginas diferentes não se cruzam" {
     var a: comp.Page = undefined;
     a.scope = lk.ids.id("pagina", 0);

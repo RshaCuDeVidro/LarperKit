@@ -3,6 +3,17 @@
 Every version of LarperKit, newest first. The API still changes whenever an app needs it to:
 pin a version in your `build.zig.zon` and read the **Breaking** list before moving to the next.
 
+## 0.1.4 (2026-11-25)
+
+- **Fixed:** `draw.tip` crashed when the tip was wider than the window (a panic in Debug and
+  ReleaseSafe, undefined behavior in ReleaseFast). A tip now never goes past the window: long
+  text breaks into lines (about 28 letters wide, less in a narrow window), a word that doesn't
+  fit on a line by itself is cut with "…", and right-to-left text is aligned to the right. A
+  short tip looks the same as before.
+- **New:** `draw.breakLines` splits a text into lines that fit a width (at spaces; `\n` always
+  breaks a line).
+- `draw.tip` leaves the QA mark `tip`.
+
 ## 0.1.3 (2026-11-24)
 
 - **New:** transparent windows for glass themes. `lk.window.Options.transparent` (on by

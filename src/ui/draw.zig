@@ -13,6 +13,7 @@ const family = @import("family.zig");
 const bidi = @import("bidi.zig");
 const anim = @import("anim.zig");
 const fx = @import("fx.zig");
+const qa = @import("qa.zig");
 const insp = @import("../inspect/captura.zig");
 
 pub const Rgba = theme_mod.Rgba;
@@ -336,21 +337,69 @@ pub fn firstGlyph(s: []const u8) []const u8 {
     return s[0..@min(len, s.len)];
 }
 
-/// Dica que aparece ao passar o mouse num botão de ícone.
+/// Dica que aparece ao passar o mouse num botão de ícone. Nunca passa da janela: o texto
+/// longo quebra em linhas pelos espaços, e uma palavra que sozinha não cabe corta com "…".
+/// Deixa a marca do QA `tip`.
 pub fn tip(ctx: *Ctx, r: Rect, label: []const u8, hovered: bool) void {
     const key = @as(usize, @intFromFloat(@abs(r.x) * 7 + @abs(r.y) * 13));
     const k = anim.to(anim.id("tip-btn", key), if (hovered) 1 else 0, 18);
-    if (k < 0.05) return;
+    if (k < 0.05 or label.len == 0) return;
     const font = ctx.ui.get(.semibold);
     const fs: f32 = 13;
-    const tw = width(font, fs, label);
-    var tr: Rect = .{ .x = r.x + r.w / 2 - tw / 2 - 10, .y = r.y - 34 + (1 - k) * 4, .w = tw + 20, .h = 26 };
+    const pad: f32 = 10;
+    const line_h = fontPx(fs) * 1.38;
+    // Umas 28 letras de largura por linha (acompanha o tamanho do texto), e menos se a
+    // janela for mais estreita que isso.
+    const max_w = @max(1, @min(fontPx(fs) * 28, ctx.win.w - 8 - 2 * pad));
+    var lines: [8][]const u8 = undefined;
+    const n = breakLines(font, fs, label, max_w, &lines);
+    var tw: f32 = 0;
+    for (lines[0..n]) |l| tw = @max(tw, width(font, fs, l));
+    tw = @min(tw, max_w);
+    // Com uma linha, o mesmo retângulo de sempre (26 de altura, 8 acima do botão).
+    const h = 26 + line_h * @as(f32, @floatFromInt(n - 1));
+    var tr: Rect = .{ .x = r.x + r.w / 2 - tw / 2 - pad, .y = r.y - h - 8 + (1 - k) * 4, .w = tw + 2 * pad, .h = h };
     if (tr.y < ctx.win.y + 4) tr.y = r.bottom() + 8;
-    tr.x = std.math.clamp(tr.x, ctx.win.x + 4, ctx.win.right() - tr.w - 4);
+    // Sem `std.math.clamp`: com a dica maior que a janela, os limites se cruzam e ele quebra.
+    // Aí ganham a borda da esquerda e a de cima.
+    tr.x = @max(ctx.win.x + 4, @min(tr.x, ctx.win.right() - tr.w - 4));
+    tr.y = @max(ctx.win.y + 4, @min(tr.y, ctx.win.bottom() - tr.h - 4));
+    if (qa.on()) qa.markTop(tr, "tip", .{});
     shadow(ctx.fg, tr, 6, 6, ctx.col(.shadow).alpha(k));
     rect(ctx.fg, tr, ctx.col(.overlay).alpha(k), 6);
     border(ctx.fg, tr, ctx.col(.border).alpha(k), 6, 1);
-    text(ctx.fg, font, fs, tr.x + 10, centerY(tr, fs), ctx.col(.text).alpha(k), label);
+    // Texto da direita para a esquerda encosta na direita.
+    const rtl = bidi.baseRtl(label);
+    const y0 = centerY(.{ .x = tr.x, .y = tr.y, .w = tr.w, .h = 26 }, fs);
+    for (lines[0..n], 0..) |l, i| {
+        const x = if (rtl) tr.right() - pad - @min(width(font, fs, l), tw) else tr.x + pad;
+        _ = textClipped(ctx.fg, font, fs, x, y0 + line_h * @as(f32, @floatFromInt(i)), ctx.col(.text).alpha(k), l, tw);
+    }
+}
+
+/// Quebra `s` em linhas de até `max_w` (pelos espaços; um "\n" sempre quebra) e põe os
+/// pedaços em `out`. Uma palavra maior que a linha fica sozinha nela, para quem desenha
+/// cortar; o que passar de `out.len` linhas vai todo na última. Devolve quantas linhas usou,
+/// pelo menos uma.
+pub fn breakLines(font: *c.ImFont, size: f32, s: []const u8, max_w: f32, out: [][]const u8) usize {
+    var n: usize = 0;
+    var start: ?usize = null; // onde começa a linha atual
+    var end: usize = 0; // o fim da última palavra que coube nela
+    var it = std.mem.tokenizeAny(u8, s, " \n");
+    while (it.next()) |word| {
+        const off = @intFromPtr(word.ptr) - @intFromPtr(s.ptr);
+        if (start) |st| {
+            // Mede a linha como vai ser desenhada, com os espaços do meio.
+            if (n + 1 < out.len and (std.mem.indexOfScalar(u8, s[end..off], '\n') != null or width(font, size, s[st .. off + word.len]) > max_w)) {
+                out[n] = s[st..end];
+                n += 1;
+                start = off;
+            }
+        } else start = off;
+        end = off + word.len;
+    }
+    out[n] = if (start) |st| s[st..end] else s[0..0];
+    return n + 1;
 }
 
 // --- Interação --------------------------------------------------------------
