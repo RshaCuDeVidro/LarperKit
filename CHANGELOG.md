@@ -3,6 +3,17 @@
 Every version of LarperKit, newest first. The API still changes whenever an app needs it to:
 pin a version in your `build.zig.zon` and read the **Breaking** list before moving to the next.
 
+## 0.1.5 (2026-11-25)
+
+- **Fixed:** a drop shadow under a translucent (glass) card left a lighter square in each
+  rounded corner, and a light strip under the card when `drop-shadow-y` is larger than the
+  corner radius. The light triangle fixed in 0.1.3 really came from the fill between the
+  card's rounded corner and the shadow: in two of the four corners it was drawn the wrong
+  way around, and ImGui put part of it inside the card. It is now drawn the right way, and
+  the corners and the strip are back for every card, glass or not.
+- **Breaking:** `fx.dropShadow` no longer takes the `opaco` argument added in 0.1.3. No part
+  of the shadow is drawn inside the card any more, so the card's background doesn't matter.
+
 ## 0.1.4 (2026-11-25)
 
 - **Fixed:** `draw.tip` crashed when the tip was wider than the window (a panic in Debug and

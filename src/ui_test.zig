@@ -268,6 +268,113 @@ test "breakLines: espaços, \\n, palavra que não cabe e o limite de linhas" {
     try eq(@as([]const []const u8, &.{""}), Dica.quebra(&h, "   ", 100));
 }
 
+/// Um cartão de vidro (fundo translúcido) com sombra projetada. Guarda os triângulos que a
+/// sombra pôs na lista de desenho, para ver onde ela pinta.
+const Sombra = struct {
+    var ren: ?*c.SDL_Renderer = null;
+    var box: lk.fx.Box = .{};
+    const card: d.Rect = .{ .x = 100, .y = 100, .w = 160, .h = 90 };
+    var radius: f32 = 0;
+    var tris: [1024][3]c.ImVec2 = undefined;
+    var n: usize = 0;
+
+    fn semTokens(_: []const u8) ?u8 {
+        return null;
+    }
+
+    fn f(ctx: *d.Ctx) void {
+        ctx.renderer = ren;
+        const dl = ctx.dl;
+        const antes: usize = @intCast(dl.*.IdxBuffer.Size);
+        lk.ui_fx.dropShadow(ctx, dl, &box, card, radius);
+        const idx = dl.*.IdxBuffer.Data;
+        const vtx = dl.*.VtxBuffer.Data;
+        const off = dl.*._CmdHeader.VtxOffset;
+        n = 0;
+        var i = antes;
+        while (i + 3 <= @as(usize, @intCast(dl.*.IdxBuffer.Size)) and n < tris.len) : (i += 3) {
+            var t: [3]c.ImVec2 = undefined;
+            var pinta = false;
+            for (0..3) |j| {
+                const v = vtx[off + idx[i + j]];
+                t[j] = v.pos;
+                if (v.col >> 24 != 0) pinta = true;
+            }
+            if (!pinta) continue;
+            tris[n] = t;
+            n += 1;
+        }
+    }
+
+    /// Distância de `p` até a borda do cartão arredondado (negativa dentro dele).
+    fn borda(p: c.ImVec2) f32 {
+        const hw = card.w / 2 - radius;
+        const hh = card.h / 2 - radius;
+        const qx = @abs(p.x - (card.x + card.w / 2)) - hw;
+        const qy = @abs(p.y - (card.y + card.h / 2)) - hh;
+        return std.math.hypot(@max(qx, 0), @max(qy, 0)) + @min(@max(qx, qy), 0) - radius;
+    }
+
+    fn lado(a: c.ImVec2, b: c.ImVec2, p: c.ImVec2) f32 {
+        return (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+    }
+
+    fn cobre(p: c.ImVec2) bool {
+        for (tris[0..n]) |t| {
+            const area = lado(t[0], t[1], t[2]);
+            if (@abs(area) < 1e-4) continue;
+            const s = std.math.sign(area);
+            if (lado(t[0], t[1], p) * s >= -1e-3 and lado(t[1], t[2], p) * s >= -1e-3 and lado(t[2], t[0], p) * s >= -1e-3) return true;
+        }
+        return false;
+    }
+};
+
+test "sombra projetada no vidro: nada entra no cartão, e em volta dele não sobra buraco" {
+    var h = try Harness.init(tema);
+    defer h.deinit();
+    h.mouse(-1000, -1000, false);
+    // Um renderer de software numa superfície na memória, só para as texturas da sombra.
+    const surf = c.SDL_CreateSurface(64, 64, c.SDL_PIXELFORMAT_RGBA32) orelse return error.SemSuperficie;
+    defer c.SDL_DestroySurface(surf);
+    Sombra.ren = c.SDL_CreateSoftwareRenderer(surf) orelse return error.SemRenderer;
+    defer {
+        lk.ui_fx.dropAll();
+        c.SDL_DestroyRenderer(Sombra.ren);
+        Sombra.ren = null;
+    }
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    var pal: [16]lk.color.Rgba = @splat(lk.color.Rgba.black);
+    Sombra.box = .{ .drop_shadow = try lk.color.compile(arena.allocator(), "alpha(black, 0.5)", &pal, Sombra.semTokens) };
+    const blur = Sombra.box.drop_shadow_size;
+    const dy = Sombra.box.drop_shadow_y;
+    const r = Sombra.card;
+    // Raio menor que o deslocamento (sobra uma faixa cheia embaixo do cartão) e maior.
+    for ([_]f32{ 6, 14 }) |rad| {
+        Sombra.radius = rad;
+        _ = h.frame(Sombra);
+        try testing.expect(Sombra.n > 0);
+        // Meio pixel de passo na caixa inteira da sombra, fora das emendas exatas.
+        var y = r.y + dy - blur + 0.25;
+        while (y < r.bottom() + dy + blur) : (y += 0.5) {
+            var x = r.x - blur + 0.25;
+            while (x < r.right() + blur) : (x += 0.5) {
+                const p: c.ImVec2 = .{ .x = x, .y = y };
+                const b = Sombra.borda(p);
+                if (b < -1 and Sombra.cobre(p)) {
+                    std.debug.print("raio {d}: sombra dentro do cartão em ({d}, {d})\n", .{ rad, x, y });
+                    return error.SombraNoVidro;
+                }
+                if (b > 1 and !Sombra.cobre(p)) {
+                    std.debug.print("raio {d}: buraco na sombra em ({d}, {d})\n", .{ rad, x, y });
+                    return error.BuracoNaSombra;
+                }
+            }
+        }
+    }
+}
+
 test "ids de páginas diferentes não se cruzam" {
     var a: comp.Page = undefined;
     a.scope = lk.ids.id("pagina", 0);

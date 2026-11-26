@@ -76,6 +76,7 @@ are `larpercord-plugin` and `larperCord/plugin/<plugin>/<key>`), its names join 
 | the Inspector recording in `inspect/captura.zig` (`kind`, rectangle, QA mark, part) | unchanged: the kit's drawing calls it exactly as before, so `ctl inspect el` and the Inspector card see the same elements |
 | `third_party/fribidi` compiled by the app | compiled by the kit's module |
 | `d.tip(ctx, r, label, hovered)`, which crashes when the tip is wider than the window | same call; long text breaks into lines and the tip stays inside the window. It leaves the QA mark `tip` |
+| `fx.dropShadow(ctx, dl, b, r, radius)`, which puts some shadow inside the top-left and bottom-right corners of the card (seen through a glass card) | same call; the shadow stays outside the card in every corner |
 
 ## Components (`src/ui/components.zig`, `src/ui/ids.zig`)
 
